@@ -21,6 +21,9 @@
 button,input,textarea,select{font:inherit;font-family:var(--font-body)}button{cursor:pointer}.app{min-height:100vh;display:flex;flex-direction:column}
 header{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 28px;gap:28px;position:sticky;top:0;z-index:20;flex-shrink:0}
 .logo{font-family:var(--font-display);font-weight:800;font-size:21px;letter-spacing:.03em;display:flex;align-items:center;gap:8px}.logo img{width:26px;height:26px;border-radius:6px;display:block}nav{display:flex;gap:5px}nav button{border:0;background:transparent;padding:9px 14px;border-radius:9px;color:#59616c}
+.header-create-actions{display:none;gap:8px;margin-left:auto}
+body.page-create nav button[data-page="home"],body.page-create nav button[data-page="library"],body.page-create nav button[data-page="create"]{display:none}
+body.page-create .header-create-actions{display:flex}
 nav button.active,nav button:hover{background:var(--accent2);color:var(--accent);font-weight:700}
 main{max-width:1120px;margin:0 auto;padding:38px 22px 80px;flex:1 0 auto;width:100%}.page{display:none}.page.active{display:block}
 h1{font-family:var(--font-display);font-weight:800;font-size:30px;margin:0 0 8px;letter-spacing:.01em}.lead{color:var(--muted);margin:0 0 30px}
@@ -281,6 +284,167 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
 /* 色入力はブラウザ標準の input[type=color] を使用 */
 .field-transparent-option{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)}.field-transparent-option input{width:auto;margin:0;box-shadow:none}
 </style>
+<style id="mobile-touch-styles">
+/* 表示項目：指でのドラッグ操作対象は誤スクロールを防ぐ */
+.layout-item,.layout-item-multi,.resize-handle{touch-action:none}
+/* 全画面・外枠設定：スマホ幅ではプレビューを常時大きく表示し、設定はボトムシートで開閉する */
+.outer-frame-tabs{display:none;gap:8px;margin:0}
+.outer-frame-tabs .btn{flex:1}
+.outer-frame-tabs .btn.active{box-shadow:0 0 0 2px var(--accent) inset;font-weight:700}
+.outer-frame-footer-inline{display:none}
+@media(max-width:900px){
+  .outer-frame-backdrop.show .outer-frame-panel{width:100vw;height:100dvh;border-radius:0}
+  .outer-frame-body{display:flex;flex-direction:column;padding:0;gap:0;overflow:hidden;position:relative;height:100%}
+  /* プレビューは常に表示・画面の主要面積を占める */
+  .outer-frame-preview-wrap{order:1;position:relative;top:auto;flex:1;min-height:0;width:100%;box-sizing:border-box;padding:14px;margin:0;display:flex;flex-direction:column}
+  .outer-frame-preview-stage{flex:1;height:auto;min-height:0}
+  /* 開閉タブ（設定を開く／閉じる） */
+  .outer-frame-tabs{order:3;display:flex;position:relative;z-index:20;margin:0;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line)}
+  .outer-frame-tabs .btn[data-tab="preview"]{display:none}
+  .outer-frame-body.mobile-sheet-open .outer-frame-tabs .btn[data-tab="settings"]{display:none}
+  .outer-frame-body.mobile-sheet-open .outer-frame-tabs .btn[data-tab="preview"]{display:flex;align-items:center;justify-content:center}
+  /* 設定はボトムシートとして下からせり上がる。プレビューはその上・裏に常に見えている */
+  .outer-frame-settings{order:2;position:fixed;left:0;right:0;bottom:0;z-index:15;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px #0000001f;margin:0;padding:16px 16px calc(64px + env(safe-area-inset-bottom,0px));max-height:0;overflow:hidden;transition:max-height .25s ease;box-sizing:border-box}
+  .outer-frame-body.mobile-sheet-open .outer-frame-settings{max-height:64vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .outer-frame-footer-inline{display:block;margin-top:16px;border-top:1px dashed var(--line);padding-top:14px;position:static}
+}
+
+/* ===== 図鑑・項目・デザイン設定：スマホ幅は大きなプレビュー＋下部の大項目タブへ ===== */
+.mobile-sheet-header{display:none}
+.mobile-daikoumoku-bar{display:none}
+.mobile-chukoumoku-bar{display:none}
+@media(max-width:900px){
+  .settings-layout,.create-settings-layout{display:block;position:relative}
+  /* プレビューを画面の主要面積に大きく表示 */
+  .settings-preview-panel,.create-settings-preview-panel{position:sticky;top:0;z-index:2;background:var(--bg);padding-top:4px;padding-bottom:6px}
+  .settings-preview-panel .preview-stage,.create-settings-preview-panel .preview-stage{min-height:58vh}
+  .settings-preview-panel label,.create-settings-preview-panel label{font-size:12.5px}
+  /* 大項目の見出しは、ボトムシートの中の小見出しとして使うのでシンプル化 */
+  .design-section-heading{margin:4px 0 10px;font-size:15px}
+  /* 編集欄そのものをボトムシート化：ふだんは畳んでおき、大項目タブを押すと該当セクションだけ表示してせり上がる */
+  .settings-editor,.create-settings-editor{
+    position:fixed;left:0;right:0;bottom:0;z-index:240;
+    background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px #0000001f;
+    max-height:0;overflow:hidden;transition:max-height .25s ease;box-sizing:border-box;
+    padding:0 14px calc(78px + env(safe-area-inset-bottom,0px));
+  }
+  .settings-editor.mobile-sheet-open,.create-settings-editor.mobile-sheet-open{
+    max-height:64vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:10px;
+  }
+  /* シート内では、選んでいる大項目以外は隠す（closeup） */
+  .settings-editor.mobile-sheet-open .design-section-heading,.create-settings-editor.mobile-sheet-open .design-section-heading{display:none}
+  .settings-editor.mobile-sheet-open .design-section-heading.mobile-active-heading,.create-settings-editor.mobile-sheet-open .design-section-heading.mobile-active-heading{display:none}
+  /* シートを閉じている間は編集欄が画面を邪魔しないよう完全に隠す */
+  .settings-editor:not(.mobile-sheet-open) *,.create-settings-editor:not(.mobile-sheet-open) *{visibility:hidden}
+  /* シートのヘッダー（タイトル＋閉じるボタン） */
+  .mobile-sheet-header{display:flex;visibility:visible!important;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;background:#fff;padding:12px 0 10px;margin:0 -14px;padding-left:14px;padding-right:14px;border-bottom:1px solid var(--line);z-index:2}
+  .settings-editor:not(.mobile-sheet-open) .mobile-sheet-header,.create-settings-editor:not(.mobile-sheet-open) .mobile-sheet-header{display:none}
+  .mobile-sheet-title{font-family:var(--font-display);font-weight:800;font-size:16px}
+  .mobile-sheet-close{border:1px solid var(--line);background:#f4f5f8;border-radius:9px;width:34px;height:34px;font-size:18px;line-height:1;color:#59616c}
+  /* 大項目：画面下部に横並びタブとして常設 */
+  .mobile-daikoumoku-bar{display:flex;visibility:visible!important;gap:6px;overflow-x:auto;position:fixed;left:0;right:0;bottom:0;z-index:245;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 18px #00000014;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .mobile-daikoumoku-bar::-webkit-scrollbar{display:none}
+  .mobile-daikoumoku-bar button{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:#f6f7fb;border-radius:11px;padding:9px 13px;font-weight:800;font-size:12.5px;color:#59616c}
+  .mobile-daikoumoku-bar button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* 中項目（表示項目の各項目）：色分けチップで大項目シートの上部に横並び */
+  .mobile-chukoumoku-bar{display:flex;visibility:visible!important;gap:6px;overflow-x:auto;position:sticky;top:56px;background:#fff;padding:8px 0;margin:0 -14px 6px;padding-left:14px;padding-right:14px;border-bottom:1px dashed var(--line);z-index:1;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .mobile-chukoumoku-bar::-webkit-scrollbar{display:none}
+  .mobile-chukoumoku-bar button{flex:0 0 auto;white-space:nowrap;border:1px solid transparent;border-radius:999px;padding:6px 12px;font-size:11.5px;font-weight:800;color:#fff}
+  .mobile-chukoumoku-bar button.active{outline:2px solid #20242a;outline-offset:-2px}
+  /* プレビュー上の項目：ワンタップで選択→選択中だけスワイプ移動・ピンチ拡大縮小できることを視覚的に示す */
+  .layout-item,.layout-item-multi{transition:outline-color .15s}
+  .layout-item.mobile-selected,.layout-item-multi.mobile-selected{outline:3px solid var(--accent);outline-offset:2px;z-index:60!important}
+  /* 右下の青いリサイズハンドルは、ワンタップして選択するまでは非表示にする */
+  .resize-handle,.layout-item-multi .resize-handle{display:none;width:26px;height:26px;border-radius:7px 0 7px 0}
+  .layout-item.mobile-selected .resize-handle,.layout-item-multi.mobile-selected .resize-handle{display:block}
+  /* 編集ガイドのグリッド間隔設定はスマホ版では表示しない */
+  .grid-guide-field{display:none}
+  /* プレビュー上でタップした項目の設定だけを表示する「項目編集モード」 */
+  .field-box.mobile-item-hidden{display:none!important}
+  .field-options.mobile-item-only .field-group{display:none}
+  .field-options.mobile-item-only .field-group.mobile-active-group{display:block}
+  .field-options.mobile-item-only .field-group-title{display:none}
+}
+/* スマホ・タブレット幅：設定欄とプレビューを1列に積む（内容に押し広げられて画面外へはみ出さないようにする） */
+@media(max-width:1050px){
+  .settings-layout,.create-settings-layout{grid-template-columns:minmax(0,1fr)}
+  .settings-editor,.create-settings-editor{min-width:0}
+}
+/* 表示項目ヘッダー：スマホ幅では操作ボタンを折り返して画面内に収める */
+@media(max-width:600px){
+  .field-box-top{display:flex;flex-wrap:wrap}
+  .field-box-top .f-name{flex:1 1 120px;min-width:0}
+}
+/* 大項目の折りたたみ／展開（図鑑作成・編集フォーム） */
+.design-section-heading[aria-expanded]{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.design-section-heading[aria-expanded]:hover{background:#eceef6}
+.design-section-heading[aria-expanded]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.design-section-heading[aria-expanded]::after{content:"▾";margin-left:auto;padding-left:8px;font-size:26px;line-height:1;font-weight:400;color:var(--muted,#6b7280);transition:transform .15s}
+.design-section-heading.sec-collapsed::after{transform:rotate(-90deg)}
+.sec-hidden{display:none!important}
+@media(prefers-reduced-motion:reduce){.design-section-heading[aria-expanded],.design-section-heading[aria-expanded]::after{transition:none}}
+</style>
+<style id="zukan-fix-proportion-sheet-draft">
+/* ===== ロゴ：タップ/クリックでホームへ ===== */
+.logo{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;white-space:nowrap;flex:0 0 auto}
+.logo:hover{opacity:.8}
+.logo:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:6px}
+
+/* ===== 図鑑ボードの完全比例レイアウト =====
+   ボード内のすべての寸法（余白・枠線・文字・ボタン・ヘッダー/フッター）を --book-scale に比例させる。
+   これにより「本文エリア＝ボード全体 − ヘッダー − フッター」も常に同じ比率になり、
+   画面幅・拡大縮小・全画面・プレビュー・外枠設定のどこで見ても縦横比と配置が崩れない。
+   （以前はスマホ幅で .btn{min-height:40px} がフッターボタンに効き、フッターだけ高さ固定になっていた） */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.book-container,.layout-preview{border-width:calc(1px * var(--book-scale,1))}
+.layout-preview>.preview-body-area{min-height:0}
+.book-header{box-sizing:border-box;flex:0 0 auto;line-height:1.4}
+.book-footer{box-sizing:border-box;flex:0 0 auto;line-height:1.3}
+.book-footer .btn{
+  min-height:0!important;line-height:1.3;
+  padding:calc(4px * var(--book-scale,1)) calc(6px * var(--book-scale,1))!important;
+  border-width:calc(1px * var(--book-scale,1));border-radius:calc(10px * var(--book-scale,1));
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto
+}
+
+/* ===== 編集途中の下書き復元バナー ===== */
+.draft-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding:10px 14px;border:1px solid #cfd8ff;background:#eef1ff;color:#3c4fb5;border-radius:12px;font-size:13px;font-weight:700;line-height:1.5}
+.draft-banner .draft-banner-actions{display:flex;gap:8px}
+.draft-banner .btn{padding:6px 12px;font-size:12.5px;min-height:0}
+
+/* ===== ボトムシートの高さをドラッグで変更 ===== */
+body.sheet-dragging{user-select:none;-webkit-user-select:none}
+.sheet-grabber{display:none}
+@media(max-width:900px){
+  /* スマホ：ヘッダーの「設定」「図鑑について」は作成・編集画面では出さない */
+  body.page-create header nav,body:has(#modalBackdrop.show) header nav{display:none}
+  /* スマホ：図鑑ボード内部レイアウトの説明文は出さない */
+  .pc-only-note{display:none!important}
+
+  /* シートの高さ：ドラッグで決めた値(--sheet-h)があればそれを使う。なければ従来どおり最大64vh */
+  .settings-editor.mobile-sheet-open,.create-settings-editor.mobile-sheet-open{max-height:var(--sheet-h,64vh);height:var(--sheet-h,auto)}
+  .outer-frame-body.mobile-sheet-open .outer-frame-settings{max-height:var(--sheet-h,64vh);height:var(--sheet-h,auto)}
+  .settings-editor.sheet-dragging,.create-settings-editor.sheet-dragging,.outer-frame-settings.sheet-dragging{transition:none}
+
+  /* 境界面（シート上端）のつかみ手 */
+  .mobile-sheet-header{touch-action:none;cursor:ns-resize}
+  .mobile-sheet-header::before{content:"";position:absolute;left:50%;top:4px;width:40px;height:4px;border-radius:999px;background:#c9ced6;transform:translateX(-50%);pointer-events:none}
+  .sheet-grabber{display:flex;justify-content:center;align-items:center;position:sticky;top:0;z-index:5;margin:-16px -16px 6px;padding:14px 0 12px;background:#fff;border-radius:18px 18px 0 0;touch-action:none;cursor:ns-resize}
+  .sheet-grabber::before{content:"";width:40px;height:4px;border-radius:999px;background:#c9ced6}
+}
+
+/* ===== スマホ：図鑑詳細（登録データ一覧）の上部が横並びで崩れる問題 =====
+   タイトル欄と操作ボタンが横に並んでタイトルが1文字ずつ折り返していたため、縦に積んで幅いっぱいに使う */
+@media(max-width:900px){
+  .book-detail-head{flex-direction:column;align-items:stretch;gap:14px;margin-top:8px}
+  .book-detail-head .book-detail-title{min-width:0}
+  .book-detail-head h1{font-size:26px;line-height:1.35;margin-top:14px!important;overflow-wrap:anywhere;word-break:normal}
+  .book-detail-head .lead{margin:0}
+  .book-detail-head .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .book-detail-head .actions .btn{width:100%;min-height:44px;white-space:normal;text-align:center;line-height:1.35;padding:9px 10px}
+  .book-detail-head .actions .btn:first-child,.book-detail-head .actions .btn:last-child{grid-column:1/-1}
+}
+</style>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true">
@@ -292,7 +456,7 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
 </svg>
 <div class="app">
 <header>
-  <div class="logo">zukanDB</div>
+  <div class="logo" id="siteLogo" role="link" tabindex="0" aria-label="ホームへ移動" title="ホームへ">zukanDB</div>
   <nav>
     <button data-page="home" class="active">トップ</button>
     <button data-page="library">図鑑ライブラリ</button>
@@ -300,6 +464,10 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
     <button data-page="settings">設定</button>
     <button data-page="about">図鑑について</button>
   </nav>
+  <div class="header-create-actions">
+    <button type="button" class="btn" onclick="showPage('home')">キャンセル</button>
+    <button type="submit" form="createForm" class="btn primary">この図鑑を作成</button>
+  </div>
 </header>
 
 <main>
@@ -324,13 +492,18 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
 <section id="create" class="page">
   <h1>図鑑作成</h1><p class="lead">外枠比率やカラー、レイアウトを自由にカスタマイズしましょう。</p>
   <form id="createForm" class="form"><div class="create-settings-layout" id="createSettingsLayout">
-    <div class="create-settings-editor">
+    <div class="create-settings-editor" id="createSettingsEditor">
+
+    <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">基本情報</div>
     <div class="row">
       <div class="field"><label>図鑑タイトル</label><input id="bookTitle" required placeholder="例：モンスター図鑑"></div>
       <div class="field"><label>図鑑サムネイル</label><div class="thumb-setting"><input id="bookThumbnailImage" type="hidden"><input id="bookThumbnailFile" type="file" accept="image/*" onchange="handleThumbnailFile(event,'bookThumbnailImage','bookThumbnailPreview')"><button type="button" class="btn" onclick="clearThumbnail('bookThumbnailImage','bookThumbnailPreview')">画像を削除</button><img id="bookThumbnailPreview" class="thumb-setting-preview" alt="サムネイルプレビュー"></div><small>ライブラリや登録データ一覧に表示する画像です。</small></div>
     </div>
-    <div class="outer-frame-summary" style="margin:0 0 18px"><button type="button" class="btn primary" onclick="openOuterFrameSettings('create')">🖼 全画面・外枠設定</button><span id="bookOuterFrameSummary" class="help">外側背景・テンプレート・図鑑位置をまとめて設定</span></div>
     <div class="global-font-toolbar" style="margin:0 0 18px"><div><label class="mini">図鑑のフォントを一括変更</label><div class="help">図鑑内の項目・タグ（ラベル）・ヘッダー・フッター・操作ボタンのフォントを一度に変更します。</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="bookGlobalFontFamily"><option value="body">ゴシック</option><option value="display">明朝</option><option value="noto-sans">Noto Sans JP</option><option value="noto-serif">Noto Serif JP</option><option value="rounded">M PLUS Rounded</option><option value="mono">等幅</option><option value="dot" selected>ドット</option><option value="pixel">ピクセル</option><option value="custom-font">カスタムフォント</option></select><button type="button" class="btn" onclick="applyGlobalFont('book')">図鑑全体に適用</button></div></div>
+    <div class="field"><label>図鑑の説明</label><textarea id="bookDesc" rows="1" placeholder="この図鑑は何を集めるもの？"></textarea></div>
+
+    <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">レイアウト・比率設定</div>
+    <div class="outer-frame-summary" style="margin:0 0 18px"><button type="button" class="btn primary" onclick="openOuterFrameSettings('create')">🖼 全画面・外枠設定</button><span id="bookOuterFrameSummary" class="help">外側背景・テンプレート・図鑑位置をまとめて設定</span></div>
     <div class="row">
       <div class="field"><label>図鑑ボードの外枠比率</label>
         <select id="bookAspect" onchange="syncAspectCustom('book');refreshCreatePreview()">
@@ -359,18 +532,13 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
           <div class="template-position-row"><div><div class="mini">図鑑の配置位置</div><select id="bookTemplatePosition" onchange="syncTemplatePosition('book');scheduleFitPreviewBook('create')"><option value="center">中央</option><option value="top-left">左上</option><option value="top-center">上中央</option><option value="top-right">右上</option><option value="middle-left">左中央</option><option value="middle-right">右中央</option><option value="bottom-left">左下</option><option value="bottom-center">下中央</option><option value="bottom-right">右下</option><option value="custom">数値指定</option></select></div><div id="bookTemplateCustomPosition" class="aspect-custom"><input id="bookTemplateX" type="number" min="0" max="100" step="0.01" value="50" placeholder="X %" oninput="scheduleFitPreviewBook('create')"><input id="bookTemplateY" type="number" min="0" max="100" step="0.01" value="50" placeholder="Y %" oninput="scheduleFitPreviewBook('create')"></div></div>
         </div>
       </div>
-      <div class="field"><label>ヘッダー表示</label>
-        <select id="bookShowHeader" onchange="refreshCreatePreview()"><option value="yes">表示する</option><option value="no">表示しない</option></select>
-      </div>
-      <div class="field"><label>フッター表示</label>
-        <select id="bookShowFooter" onchange="refreshCreatePreview()"><option value="yes">表示する</option><option value="no">表示しない</option></select>
-        <small>「表示しない」にすると、前へ・編集・削除・次へのボタンは図鑑ボードの外側に表示されます。</small>
-      </div>
+      <div class="field"><label>図鑑の角丸率</label><input id="bookRadius" type="number" min="0" max="120" step="1" value="16" oninput="refreshCreatePreview()"><small>基準サイズ650px時の角丸px。表示サイズに完全比例して拡大・縮小します。</small></div>
     </div>
+
+    <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">背景・カラー設定</div>
     <div class="row">
       <div class="field"><label>ヘッダーの背景色</label><input id="bookHeaderBg" type="color" value="#80bfff" style="height:44px;padding:4px" oninput="refreshCreatePreview()"></div>
       <div class="field"><label>図鑑の背景色 (パネル内)</label><input id="bookPanelBg" type="color" value="#d1e7ff" style="height:44px;padding:4px" oninput="refreshCreatePreview()"></div>
-      <div class="field"><label>図鑑の角丸率</label><input id="bookRadius" type="number" min="0" max="120" step="1" value="16" oninput="refreshCreatePreview()"><small>基準サイズ650px時の角丸px。表示サイズに完全比例して拡大・縮小します。</small></div>
     </div>
     <div class="row">
       <div class="field"><label>図鑑背景の表示方法</label><select id="bookBackgroundMode" onchange="refreshCreatePreview()"><option value="pattern" selected>色・パターン</option><option value="image">画像</option></select><small>「画像」を選ぶと、背景画像を優先して表示します。</small></div>
@@ -406,11 +574,19 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
       <img id="bookFullscreenBgPreview" style="display:none;max-height:120px;max-width:240px;margin-top:8px;border:1px solid var(--line);border-radius:8px;object-fit:cover">
       <small>透過PNGを使うと、図鑑の外側だけに装飾を置けます。</small>
     </div>
+
+    <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">ヘッダー・フッター設定</div>
     <div class="row">
+      <div class="field"><label>ヘッダー表示</label>
+        <select id="bookShowHeader" onchange="refreshCreatePreview()"><option value="yes">表示する</option><option value="no">表示しない</option></select>
+      </div>
+      <div class="field"><label>フッター表示</label>
+        <select id="bookShowFooter" onchange="refreshCreatePreview()"><option value="yes">表示する</option><option value="no">表示しない</option></select>
+        <small>「表示しない」にすると、前へ・編集・削除・次へのボタンは図鑑ボードの外側に表示されます。</small>
+      </div>
       <div class="field"><label>ヘッダーに連動させる項目</label>
         <select id="bookHeaderField" onfocus="updateHeaderFieldOptions('bookHeaderField')" onchange="refreshCreatePreview()"><option value="">（図鑑タイトルを表示）</option></select>
       </div>
-      <div class="field"><label>図鑑の説明</label><textarea id="bookDesc" rows="1" placeholder="この図鑑は何を集めるもの？"></textarea></div>
     </div>
 
     <details class="design-details">
@@ -444,7 +620,7 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
       </div>
     </details>
 
-    <div class="design-section-heading">表示項目</div>
+    <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">表示項目</div>
     <div class="field">
       <label>表示項目の設定</label>
       <p class="help">ここからは図鑑に表示する各項目の設定です。プレビュー上でもドラッグして位置・大きさを調整できます。「⠿」を掴む、または▲▼ボタンで項目の並び順を変更できます。</p>
@@ -470,12 +646,12 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
     </div>
     </div><aside class="create-settings-preview-panel">
       <label>図鑑ボード・レイアウトプレビュー</label>
-      <div class="field" style="margin-bottom:10px"><label class="mini">編集ガイドのグリッド間隔</label><select id="bookGridGuideInterval" onchange="refreshCreatePreview()"><option value="1">1マスごと（初期値）</option><option value="2">2マスごと</option><option value="3">3マスごと</option><option value="4">4マスごと</option><option value="6">6マスごと</option><option value="8">8マスごと</option></select><small>プレビューに表示するうすいグリッド線の間隔です。配置やサイズには影響しません。</small></div>
+      <div class="field grid-guide-field" style="margin-bottom:10px"><label class="mini">編集ガイドのグリッド間隔</label><select id="bookGridGuideInterval" onchange="refreshCreatePreview()"><option value="1">1マスごと（初期値）</option><option value="2">2マスごと</option><option value="3">3マスごと</option><option value="4">4マスごと</option><option value="6">6マスごと</option><option value="8">8マスごと</option></select><small>プレビューに表示するうすいグリッド線の間隔です。配置やサイズには影響しません。</small></div>
       <div class="preview-stage preview-phone" id="createPreviewStage">
         <div id="createPreview" class="layout-preview"></div>
       </div>
-      <div class="help" style="text-align:center;margin-top:6px">図鑑ボード内部のレイアウトだけを表示します。外側背景・配置位置は「全画面・外枠設定」で確認できます。</div>
-    <div class="settings-preview-actions"><button type="button" class="btn" onclick="showPage('home')">キャンセル</button><button class="btn primary" type="submit">この図鑑を作成</button></div></aside></div>
+      <div class="help pc-only-note" style="text-align:center;margin-top:6px">図鑑ボード内部のレイアウトだけを表示します。外側背景・配置位置は「全画面・外枠設定」で確認できます。</div>
+    </aside></div>
   </form>
 </section>
 
@@ -677,8 +853,6 @@ body.fullscreen-mode .book-container > *:not(:first-child):not(:last-child){bord
 /* ラベルだけは読みやすさ優先で固定。ラベル以外の文字はボードと完全に同率縮尺。 */
 .book-container .scaled-label { font-size: calc(10px * var(--book-scale, 1)) !important; gap: calc(5px * var(--book-scale, 1)); margin-bottom: calc(2px * var(--book-scale, 1)) !important; }
 .book-container .scaled-label::before { width: calc(5px * var(--book-scale, 1)); height: calc(5px * var(--book-scale, 1)); }
-.book-container .scaled-header { font-size: calc(13px * var(--book-scale, 1)) !important; }
-.book-container .scaled-footer { font-size: calc(11px * var(--book-scale, 1)) !important; }
 .book-container .scaled-button { font-size: calc(14px * var(--book-scale, 1)) !important; padding: calc(8px * var(--book-scale, 1)) calc(12px * var(--book-scale, 1)) !important; }
 .book-container .scaled-placeholder { font-size: calc(12px * var(--book-scale, 1)) !important; }
 .layout-preview .preview-val.scaled-preview-text { font-size: calc(var(--base-font-size, 14px) * var(--book-scale, 1)) !important; }
@@ -1067,6 +1241,7 @@ function setActivePage(id){
   if(!target)return false;
   document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x===target));
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===id));
+  document.body.classList.toggle('page-create',id==='create');
   appState.page=id;
   document.title=PAGE_TITLES[id]||DEFAULT_TITLE;
   return true;
@@ -1290,7 +1465,7 @@ function openOuterFrameSettings(prefix){
   outerFullscreenOuterVisibleDraft[prefix]=existing?.fullscreenOuterVisible!==false;
   outerFrameScaleDraft[prefix]=Math.max(25,Math.min(300,Number(existing?.fullscreenBookScale)||100));
   const back=document.getElementById('outerFrameBackdrop'); if(!back)return;
-  back.innerHTML=`<div class="outer-frame-panel" role="dialog" aria-modal="true"><div class="outer-frame-head"><div><h2 style="margin:0">🖼 全画面・外枠設定</h2><div class="help" style="margin-top:4px">外枠・テンプレート・全画面時の外側背景・図鑑の位置をここでまとめて設定します。</div></div><button class="btn" type="button" onclick="closeOuterFrameSettings()">×</button></div><div class="outer-frame-body"><div class="outer-frame-settings">
+  back.innerHTML=`<div class="outer-frame-panel" role="dialog" aria-modal="true"><div class="outer-frame-head"><div><h2 style="margin:0">🖼 全画面・外枠設定</h2><div class="help" style="margin-top:4px">外枠・テンプレート・全画面時の外側背景・図鑑の位置をここでまとめて設定します。</div></div><button class="btn" type="button" onclick="closeOuterFrameSettings()">×</button></div><div class="outer-frame-body"><div class="outer-frame-tabs"><button type="button" class="btn active" data-tab="settings" onclick="switchOuterFrameTab('settings')">⚙ 設定を開く</button><button type="button" class="btn" data-tab="preview" onclick="switchOuterFrameTab('preview')">✕ 設定を閉じる</button></div><div class="outer-frame-settings">
   <div class="field"><label>PNGテンプレート出力</label><div class="row"><select id="outerTemplatePreset"><option value="1080x1920">スマホ 1080×1920</option><option value="1920x1080">PC 1920×1080</option><option value="2048x2048">正方形 2048×2048</option><option value="custom">自由指定</option></select><button type="button" class="btn" onclick="syncOuterFrameToForm(outerFrameContext);downloadFrameTemplate(outerFrameContext==='edit'?'edit':'book')">PNG出力</button></div><div id="outerTemplateCustom" class="aspect-custom"><input id="outerTemplateW" type="number" min="64" max="10000" value="1080"><input id="outerTemplateH" type="number" min="64" max="10000" value="1920"></div></div>
   <div class="outer-device-settings-head"><strong>全画面表示の端末設定</strong><div class="outer-device-tabs"><button type="button" class="btn active" id="outerSettingPhoneBtn" onclick="switchOuterDeviceSetting('phone')">📱 スマホの設定</button><button type="button" class="btn" id="outerSettingPcBtn" onclick="switchOuterDeviceSetting('pc')">🖥 PCの設定</button></div><div id="outerDeviceFallbackNote" class="help">未設定の端末は共通の初期値を使用します。端末ごとの設定は互いに影響しません。</div></div>
   <div class="field"><label>図鑑を表示する位置</label><select id="outerTemplatePosition" onchange="syncOuterFrameToForm(outerFrameContext);syncOuterPopupVisibility()"><option value="center">中央</option><option value="custom">数値指定</option></select><div id="outerTemplateCustomPosition" class="outer-frame-position-grid"><input id="outerTemplateX" type="number" min="0" max="100" step="0.01" placeholder="X %"><input id="outerTemplateY" type="number" min="0" max="100" step="0.01" placeholder="Y %"></div></div>
@@ -1302,6 +1477,16 @@ function openOuterFrameSettings(prefix){
   <div class="field"><label>外側の背景画像</label><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="outerBgFile" type="file" accept="image/*"><input id="outerBgImage" type="hidden"><button type="button" class="btn" onclick="openBackgroundCropper(outerFrameContext==='edit'?'editFullscreenBgImage':'bookFullscreenBgImage','outerBgPreview')">✂ 切り抜く</button><button type="button" class="btn danger" onclick="clearOuterFrameImage()">画像を削除</button></div><img id="outerBgPreview" style="display:none;max-width:100%;max-height:150px;margin-top:8px;border:1px solid var(--line);border-radius:8px;object-fit:contain"></div>
   <div class="help">画像を選んだ場合は、元画像の縦横比を維持して<strong>画像全体</strong>を表示します。PC画面にスマホ用画像を設定した場合、画像の外側は黒で埋めます。</div>
  </div><div class="outer-frame-preview-wrap"><label>背景に重ねた図鑑プレビュー</label><div id="outerFramePreviewStage" class="outer-frame-preview-stage"><img id="outerFramePreviewBg" class="outer-frame-preview-bg" alt="外側背景"><div id="outerFramePreviewBook" class="outer-frame-preview-book"></div></div><div class="help" style="text-align:center;margin-top:8px">上の端末タブで設定対象を切り替え、最後にそれぞれの「〜に適用する」を押してください。適用した設定は端末ごとに別々に保存されます。</div></div><div class="outer-frame-footer" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap"><button id="outerApplyCurrentBtn" class="btn primary" type="button" onclick="applyOuterFrameSettings()">📱 スマホに適用する</button></div></div>`;
+  if(window.matchMedia('(max-width:900px)').matches){
+    const footerEl=back.querySelector('.outer-frame-footer');
+    const settingsEl=back.querySelector('.outer-frame-settings');
+    if(footerEl && settingsEl){ footerEl.classList.add('outer-frame-footer-inline'); settingsEl.appendChild(footerEl); }
+    if(settingsEl){
+      const grab=document.createElement('div');
+      grab.className='sheet-grabber'; grab.setAttribute('aria-label','ドラッグして高さを変更');
+      settingsEl.prepend(grab); attachSheetResize(grab,settingsEl);
+    }
+  }
   back.classList.add('show'); back.setAttribute('aria-hidden','false');
   setOuterFramePreviewDevice('phone');
   syncOuterFramePopupFromForm(prefix);
@@ -1538,6 +1723,7 @@ function initCreate(){
   syncOuterFrameSummary('create');
   enableFieldReorder('fields','create');
   initFieldHistory('create');
+  restoreDraft('create');
 }
 
 function toggleFieldRadiusVisibility(box){
@@ -2275,6 +2461,7 @@ function initFieldHistory(prefix){
   h.list = snap!=null ? [snap] : [];
   h.idx = h.list.length-1;
   updateHistoryButtons(prefix);
+  captureDraftBaseline(prefix,snap);
 }
 function pushHistorySnapshot(prefix, immediate){
   const h=fieldHistory[prefix];
@@ -2289,6 +2476,7 @@ function pushHistorySnapshot(prefix, immediate){
     if(h.list.length>60) h.list.shift();
     h.idx = h.list.length-1;
     updateHistoryButtons(prefix);
+    scheduleDraftSave(prefix);
   };
   if(immediate){ doPush(); } else { h.timer=setTimeout(doPush, 600); }
 }
@@ -2697,7 +2885,7 @@ function ensureSettingsSplitter(prefix){
 function setSettingsSplit(prefix,value){
   const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
   const n=Math.max(25,Math.min(55,Number(value)||40));
-  if(layout){layout.style.setProperty('--preview-width',n+'%');layout.style.gridTemplateColumns=`minmax(0,calc(100% - ${n}% - 20px)) minmax(320px,${n}%)`; }
+  if(layout){layout.style.setProperty('--preview-width',n+'%'); /* 列幅はCSS側（PC：--preview-width、スマホ：1列）で決める。インライン指定するとスマホ幅で設定欄の幅が0になる */ }
   ensureSettingsSplitter(prefix);
   requestAnimationFrame(()=>{if(prefix==='create')fitPreviewBook('create');else fitPreviewBook('edit');});
 }
@@ -2721,7 +2909,7 @@ function refreshCreatePreview(){
   el.classList.remove('book-pattern-plain','book-pattern-check','book-pattern-grid','book-pattern-border','book-pattern-check-even','book-pattern-cross-dots');
 
   const button=(k,fallback,disabled=false)=>`<button class="btn" ${disabled?'disabled':''} style="color:${nav[k+'Color']};background:${nav[k+'Bg']};border-color:${nav[k+'Bg']};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));">${esc(nav[k+'Label']||fallback)}</button>`;
-  const headerHtml=showHeader==='yes'?`<div style="background:${headerBg};padding:8px 14px;border-bottom:1px solid var(--line);font-size:calc(${headerFontSize}px * var(--book-scale,1));font-weight:bold;display:flex;justify-content:space-between;flex-shrink:0;color:${headerTextColor};font-family:${headerFontFamily};text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)))"><span>${esc(document.getElementById('bookHeaderText')?.value||bookTitle)}</span><span>No. 1 / 1</span></div>`:'';
+  const headerHtml=showHeader==='yes'?`<div class="book-header" style="background:${headerBg};color:${headerTextColor};font-family:${headerFontFamily};font-size:calc(${headerFontSize}px * var(--book-scale,1));text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)));"><span style="font-family:${headerFontFamily};text-align:${headerAlign};display:inline-flex;align-items:center;gap:4px">${esc(document.getElementById('bookHeaderText')?.value||bookTitle)}</span><span style="font-family:${headerFontFamily};text-align:right">No. 1 / 1</span></div>`:'';
   const footerHtml=showFooter==='yes'?`<div class="book-footer" style="background:${footerBg};color:${footerTextColor};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));padding:calc(4px * var(--book-scale,1)) calc(6px * var(--book-scale,1));min-height:calc(34px * var(--book-scale,1));text-align:${footerAlign}"><div class="footer-nav" style="transform:translateX(calc(${footerTextX}px * var(--book-scale,1)))"><div class="footer-title">${esc(document.getElementById('bookFooterText')?.value||bookTitle)}</div><div class="footer-actions">${button('prev','〈 前へ',true)}${button('edit','編集')}${button('delete','削除')}${button('next','次へ 〉',true)}</div></div></div>`:'';
   const headerFieldId=document.getElementById('bookHeaderField')?.value||''; const fields=collectFields('fields').filter(f=>f.id!==headerFieldId);
   el.innerHTML=`${headerHtml}<div class="preview-body-area" id="createPreviewBody">${fields.map(f=>layoutBoxHtml(f,null)).join('')}</div>${footerHtml}`; applyPreviewBackground('createPreview',backgroundImage,pattern,patternColor,panelBg,backgroundMode,{size:document.getElementById('bookPatternSize')?.value,line:document.getElementById('bookPatternLineWidth')?.value,gap:document.getElementById('bookPatternGap')?.value,angle:document.getElementById('bookPatternAngle')?.value}); initDragAndDrop('createPreviewBody','createPreview'); scheduleFitPreviewBook('create'); installPreviewScaleObservers();
@@ -2736,7 +2924,7 @@ function refreshEditPreview(){
   const def=b?.footerNav||{}; const nav={}; ['prevLabel','editLabel','deleteLabel','nextLabel','prevColor','editColor','deleteColor','nextColor','prevBg','editBg','deleteBg','nextBg'].forEach(k=>{const elx=document.getElementById('editNav'+k.charAt(0).toUpperCase()+k.slice(1)); nav[k]=elx?elx.value:(def[k]||({prevLabel:'〈 前へ',editLabel:'編集',deleteLabel:'削除',nextLabel:'次へ 〉',prevColor:'#59616c',editColor:'#fff',deleteColor:'#fff',nextColor:'#59616c',prevBg:'#fff',editBg:'#4f6bed',deleteBg:'#e05252',nextBg:'#fff'})[k]);});
   const asp=parseAspect(getEditAspectValue()); const gridInterval=Math.max(1,parseInt(document.getElementById('editGridGuideInterval')?.value)||1); const guideW=(100/48)*gridInterval, guideH=guideW*asp.w/asp.h; el.style.setProperty('--guide-cell-w',guideW.toFixed(6)+'%'); el.style.setProperty('--guide-cell-h',guideH.toFixed(6)+'%'); el.style.aspectRatio=`${asp.w} / ${asp.h}`; el.style.backgroundColor=panelBg; el.style.setProperty('--book-radius-base',bookRadius+'px'); el.style.setProperty('--pattern-color1',patternColor); el.style.setProperty('--pattern-color2',panelBg); el.style.backgroundImage='none'; el.classList.remove('book-pattern-plain','book-pattern-check','book-pattern-grid','book-pattern-border','book-pattern-check-even','book-pattern-cross-dots');
   const button=(k,fallback,disabled=false)=>`<button class="btn" ${disabled?'disabled':''} style="color:${nav[k+'Color']};background:${nav[k+'Bg']};border-color:${nav[k+'Bg']};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));">${esc(nav[k+'Label']||fallback)}</button>`;
-  const headerHtml=showHeader==='yes'?`<div style="background:${headerBg};padding:8px 14px;border-bottom:1px solid var(--line);font-size:calc(${headerFontSize}px * var(--book-scale,1));font-weight:bold;display:flex;justify-content:space-between;flex-shrink:0;color:${headerTextColor};font-family:${headerFontFamily};text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)))"><span>${esc(document.getElementById('editHeaderText')?.value||bookTitle)}</span><span>No. 1 / ${b?.items?.length||1}</span></div>`:'';
+  const headerHtml=showHeader==='yes'?`<div class="book-header" style="background:${headerBg};color:${headerTextColor};font-family:${headerFontFamily};font-size:calc(${headerFontSize}px * var(--book-scale,1));text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)));"><span style="font-family:${headerFontFamily};text-align:${headerAlign};display:inline-flex;align-items:center;gap:4px">${esc(document.getElementById('editHeaderText')?.value||bookTitle)}</span><span style="font-family:${headerFontFamily};text-align:right">No. 1 / ${b?.items?.length||1}</span></div>`:'';
   const footerHtml=showFooter==='yes'?`<div class="book-footer" style="background:${footerBg};color:${footerTextColor};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));padding:calc(4px * var(--book-scale,1)) calc(6px * var(--book-scale,1));min-height:calc(34px * var(--book-scale,1));text-align:${footerAlign}"><div class="footer-nav" style="transform:translateX(calc(${footerTextX}px * var(--book-scale,1)))"><div class="footer-title">${esc(document.getElementById('editFooterText')?.value||bookTitle)}</div><div class="footer-actions">${button('prev','〈 前へ',true)}${button('edit','編集')}${button('delete','削除')}${button('next','次へ 〉',true)}</div></div></div>`:'';
   // 編集プレビューも実データを流用せず、常に固定サンプルを表示する。
   const fs=collectFields('editFields').filter(f=>f.id!==headerFieldId); el.innerHTML=`${headerHtml}<div class="preview-body-area" id="editPreviewBody">${fs.map(f=>layoutBoxHtml(f,null)).join('')}</div>${footerHtml}`; applyPreviewBackground('editPreview',backgroundImage,pattern,patternColor,panelBg,backgroundMode,{size:document.getElementById('editPatternSize')?.value,line:document.getElementById('editPatternLineWidth')?.value,gap:document.getElementById('editPatternGap')?.value,angle:document.getElementById('editPatternAngle')?.value}); initDragAndDrop('editPreviewBody','editPreview'); scheduleFitPreviewBook('edit'); installPreviewScaleObservers();
@@ -2885,6 +3073,7 @@ function hideFieldDragTooltip(){
 // スクロールして表示し、折りたたまれていれば展開し、軽くハイライトして分かりやすくする。
 function focusFieldBox(box){
   if(!box) return;
+  expandDesignSectionFor(box);
   if(box.classList.contains('collapsed')) toggleFieldCollapse(box);
   box.scrollIntoView({behavior:'smooth', block:'center'});
   box.classList.remove('flash-highlight');
@@ -2932,14 +3121,17 @@ function initMultiLayoutItem(item, bodyEl, wrapperId){
   };
 
   if(handle){
-    handle.onmousedown=(e)=>{
+    handle.onpointerdown=(e)=>{
+      if(isMobileDesignUI() && !item.classList.contains('mobile-selected')) return; // ワンタップで選択してからでないとリサイズできない
       e.preventDefault(); e.stopPropagation();
+      try{handle.setPointerCapture(e.pointerId);}catch(err){}
       isResizing=true; startX=e.clientX; startY=e.clientY;
       const rect=bodyEl.getBoundingClientRect(); colW=rect.width/48; rowH=rect.height/30;
       const cur=getPos(), label=box.querySelector('.f-name')?.value.trim()||'無題';
       showFieldDragTooltip(`${label}（${slotIndex+1}個目）`,e.clientX,e.clientY);
       const onMove=(ev)=>{
         if(!isResizing||!colW||!rowH)return;
+        ev.preventDefault();
         const nw=Math.max(1,Math.min(49-cur.x,cur.w+Math.round((ev.clientX-startX)/colW)));
         const nh=Math.max(1,Math.min(31-cur.y,cur.h+Math.round((ev.clientY-startY)/rowH)));
         if(nw!==cur.w||nh!==cur.h){
@@ -2948,26 +3140,31 @@ function initMultiLayoutItem(item, bodyEl, wrapperId){
         }
         showFieldDragTooltip(`${label}（${slotIndex+1}個目・${nw}×${nh}）`,ev.clientX,ev.clientY);
       };
-      const onUp=()=>{
+      const onUp=(ev)=>{
         isResizing=false; hideFieldDragTooltip();
-        window.removeEventListener('mousemove',onMove);
-        window.removeEventListener('mouseup',onUp);
+        try{handle.releasePointerCapture(ev.pointerId);}catch(err){}
+        window.removeEventListener('pointermove',onMove);
+        window.removeEventListener('pointerup',onUp);
         pushHistorySnapshot(prefix,true);
       };
-      window.addEventListener('mousemove',onMove);
-      window.addEventListener('mouseup',onUp);
+      window.addEventListener('pointermove',onMove);
+      window.addEventListener('pointerup',onUp);
     };
   }
 
-  item.onmousedown=(e)=>{
+  item.onpointerdown=(e)=>{
     const target=e.target;
+    if(isMobileDesignUI() && !item.classList.contains('mobile-selected')) return; // ワンタップで選択してからでないと移動できない
     if(isResizing || target?.closest('input,textarea,select,button,option,a,[contenteditable="true"],[role="textbox"]') || target?.classList?.contains('resize-handle')) return;
+    e.preventDefault();
+    try{item.setPointerCapture(e.pointerId);}catch(err){}
     isDragging=true; startX=e.clientX; startY=e.clientY; item.style.zIndex=100;
     const rect=bodyEl.getBoundingClientRect(); colW=rect.width/48; rowH=rect.height/30;
     const cur=getPos(), label=box.querySelector('.f-name')?.value.trim()||'無題';
     showFieldDragTooltip(`${label}（${slotIndex+1}個目）`,e.clientX,e.clientY);
     const onMove=(ev)=>{
       if(!isDragging||!colW||!rowH)return;
+      ev.preventDefault();
       const nx=Math.max(1,Math.min(49-cur.w,cur.x+Math.round((ev.clientX-startX)/colW)));
       const ny=Math.max(1,Math.min(31-cur.h,cur.y+Math.round((ev.clientY-startY)/rowH)));
       if(nx!==cur.x||ny!==cur.y){
@@ -2976,14 +3173,15 @@ function initMultiLayoutItem(item, bodyEl, wrapperId){
       }
       showFieldDragTooltip(`${label}（${slotIndex+1}個目）`,ev.clientX,ev.clientY);
     };
-    const onUp=()=>{
+    const onUp=(ev)=>{
       isDragging=false; item.style.zIndex=2; hideFieldDragTooltip();
-      window.removeEventListener('mousemove',onMove);
-      window.removeEventListener('mouseup',onUp);
+      try{item.releasePointerCapture(ev.pointerId);}catch(err){}
+      window.removeEventListener('pointermove',onMove);
+      window.removeEventListener('pointerup',onUp);
       pushHistorySnapshot(prefix,true);
     };
-    window.addEventListener('mousemove',onMove);
-    window.addEventListener('mouseup',onUp);
+    window.addEventListener('pointermove',onMove);
+    window.addEventListener('pointerup',onUp);
   };
 }
 function initDragAndDrop(bodyId, wrapperId){
@@ -3007,8 +3205,10 @@ function initDragAndDrop(bodyId, wrapperId){
     };
 
     if(handle){
-      handle.onmousedown = (e) => {
-        e.stopPropagation();
+      handle.onpointerdown = (e) => {
+        if(isMobileDesignUI() && !item.classList.contains('mobile-selected')) return; // ワンタップで選択してからでないとリサイズできない
+        e.preventDefault(); e.stopPropagation();
+        try{handle.setPointerCapture(e.pointerId);}catch(err){}
         isResizing = true; startX = e.clientX; startY = e.clientY;
         const rect = bodyEl.getBoundingClientRect();
         colW = rect.width / 48; rowH = rect.height / 30;
@@ -3022,6 +3222,7 @@ function initDragAndDrop(bodyId, wrapperId){
 
         const onMouseMove = (e) => {
           if(!isResizing || colW === 0 || rowH === 0) return;
+          e.preventDefault();
           const dx = e.clientX - startX, dy = e.clientY - startY;
 
           const deltaW = Math.round(dx / colW);
@@ -3043,22 +3244,25 @@ function initDragAndDrop(bodyId, wrapperId){
             if(wrapperId === 'editPreview') refreshEditPreview();
           }
         };
-        const onMouseUp = () => { isResizing = false; hideFieldDragTooltip(); window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); pushHistorySnapshot(wrapperId==='createPreview'?'create':'edit', true); };
-        window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp);
+        const onMouseUp = (e) => { isResizing = false; hideFieldDragTooltip(); try{handle.releasePointerCapture(e.pointerId);}catch(err){} window.removeEventListener('pointermove', onMouseMove); window.removeEventListener('pointerup', onMouseUp); pushHistorySnapshot(wrapperId==='createPreview'?'create':'edit', true); };
+        window.addEventListener('pointermove', onMouseMove); window.addEventListener('pointerup', onMouseUp);
       };
     }
 
-    item.onmousedown = (e) => {
+    item.onpointerdown = (e) => {
       // レイアウト項目のドラッグ開始とフォーム操作を完全に分離する。
       // textarea を含む入力系要素をドラッグ対象にすると、入力中の再描画で
       // フォーカス・IME・カーソル位置が失われることがあるため、ここでは
-      // 「操作可能な要素上の mousedown は絶対にレイアウト移動へ渡さない」。
+      // 「操作可能な要素上の pointerdown は絶対にレイアウト移動へ渡さない」。
       const target = e.target;
       const interactive = target && (
         target.closest('input, textarea, select, button, option, a, [contenteditable="true"], [role="textbox"]') ||
         target.isContentEditable
       );
+      if(isMobileDesignUI() && !item.classList.contains('mobile-selected')) return; // ワンタップで選択してからでないと移動できない
       if(isResizing || interactive || target.classList.contains('resize-handle')) return;
+      e.preventDefault();
+      try{item.setPointerCapture(e.pointerId);}catch(err){}
       isDragging = true; startX = e.clientX; startY = e.clientY; item.style.zIndex = 100;
       
       const rect = bodyEl.getBoundingClientRect();
@@ -3073,6 +3277,7 @@ function initDragAndDrop(bodyId, wrapperId){
 
       const onMouseMove = (e) => {
         if(!isDragging || colW === 0 || rowH === 0) return;
+        e.preventDefault();
         const dx = e.clientX - startX, dy = e.clientY - startY;
 
         const deltaX = Math.round(dx / colW);
@@ -3094,8 +3299,8 @@ function initDragAndDrop(bodyId, wrapperId){
             if(wrapperId === 'editPreview') refreshEditPreview();
         }
       };
-      const onMouseUp = () => { isDragging = false; item.style.zIndex = 1; hideFieldDragTooltip(); window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); pushHistorySnapshot(wrapperId==='createPreview'?'create':'edit', true); };
-      window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp);
+      const onMouseUp = (e) => { isDragging = false; item.style.zIndex = 1; hideFieldDragTooltip(); try{item.releasePointerCapture(e.pointerId);}catch(err){} window.removeEventListener('pointermove', onMouseMove); window.removeEventListener('pointerup', onMouseUp); pushHistorySnapshot(wrapperId==='createPreview'?'create':'edit', true); };
+      window.addEventListener('pointermove', onMouseMove); window.addEventListener('pointerup', onMouseUp);
     };
   });
 
@@ -3104,6 +3309,9 @@ function initDragAndDrop(bodyId, wrapperId){
   bodyEl.querySelectorAll('.layout-item-multi').forEach(item=>{
     initMultiLayoutItem(item, bodyEl, wrapperId);
   });
+
+  // スマホ幅：ワンタップ選択・2本指ピンチ拡大縮小を追加で有効化
+  bindMobileItemInteractions(bodyEl, wrapperId);
 }
 
 // 入力欄をクリックした瞬間にレイアウトドラッグ側へイベントが漏れないよう、
@@ -3159,7 +3367,7 @@ if(createFormEl){
       headerFieldId:document.getElementById('bookHeaderField')?.value||'',
       fields,items:[],_gridColumns:48,created:Date.now()
     };
-    books.push(b);save();toast('図鑑を作成しました');
+    books.push(b);save();clearDraft('create');toast('図鑑を作成しました');
     createFormEl.reset();
     const bgPreview=document.getElementById('bookBackgroundPreview'); if(bgPreview){bgPreview.removeAttribute('src');bgPreview.style.display='none';}
     const thumbPreview=document.getElementById('bookThumbnailPreview'); if(thumbPreview){thumbPreview.removeAttribute('src');thumbPreview.style.display='none';}
@@ -3224,8 +3432,8 @@ function openBook(id){
  const detailContent = document.getElementById('detailContent');
  if(detailContent){
    detailContent.innerHTML=`
-    <div class="section-title">
-      <div><button class="btn" onclick="showPage('library')">← ライブラリ</button><h1 style="margin-top:18px">${esc(b.title)}</h1><p class="lead">${esc(b.desc||'')}</p></div>
+    <div class="section-title book-detail-head">
+      <div class="book-detail-title"><button class="btn" onclick="showPage('library')">← ライブラリ</button><h1 style="margin-top:18px">${esc(b.title)}</h1><p class="lead">${esc(b.desc||'')}</p></div>
       <div class="actions">
         <button class="btn" onclick="openFieldSettings('${b.id}')">⚙ 項目・レイアウト設定</button>
         <button class="btn" onclick="exportSingleBookData('${b.id}')">⬇ 図鑑を書き出す</button>
@@ -4668,7 +4876,9 @@ function openFieldSettings(bookId){
  if(modal){
    modal.innerHTML=`<h2>図鑑・項目・デザイン設定</h2>
    <div class="settings-layout" id="editSettingsLayout">
-   <div class="settings-editor">
+   <div class="settings-editor" id="editSettingsEditor">
+
+   <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">基本情報</div>
    <div class="row" style="margin-bottom:14px">
      <div><label class="mini">図鑑タイトル</label><input id="editBookTitle" lang="ja" inputmode="text" value="${esc(b.title)}" oninput="refreshEditPreview()"></div>
      <div><label class="mini">図鑑の説明</label><input id="editBookDesc" lang="ja" inputmode="text" value="${esc(b.desc||'')}"></div>
@@ -4676,8 +4886,10 @@ function openFieldSettings(bookId){
    <div class="row" style="margin-bottom:14px">
      <div><label class="mini">図鑑サムネイル</label><div class="thumb-setting"><input id="editThumbnailImage" type="hidden" value="${esc(b.thumbnail||'')}"><input id="editThumbnailFile" type="file" accept="image/*" onchange="handleThumbnailFile(event,'editThumbnailImage','editThumbnailPreview')"><button type="button" class="btn" onclick="clearThumbnail('editThumbnailImage','editThumbnailPreview')">画像を削除</button><img id="editThumbnailPreview" class="thumb-setting-preview" src="${esc(b.thumbnail||'')}" alt="" style="${b.thumbnail?'display:block;':''}"></div></div>
    </div>
-   <div class="outer-frame-summary" style="margin:0 0 18px"><button type="button" class="btn primary" onclick="openOuterFrameSettings('edit')">🖼 全画面・外枠設定</button><span id="editOuterFrameSummary" class="help">外側背景・テンプレート・図鑑位置をまとめて設定</span></div>
    <div class="global-font-toolbar" style="margin:0 0 18px"><div><label class="mini">図鑑のフォントを一括変更</label><div class="help">図鑑内の項目・タグ（ラベル）・ヘッダー・フッター・操作ボタンのフォントを一度に変更します。</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="editGlobalFontFamily"><option value="body">ゴシック</option><option value="display">明朝</option><option value="noto-sans">Noto Sans JP</option><option value="noto-serif">Noto Serif JP</option><option value="rounded">M PLUS Rounded</option><option value="mono">等幅</option><option value="dot">ドット</option><option value="pixel">ピクセル</option><option value="custom-font">カスタムフォント</option></select><button type="button" class="btn" onclick="applyGlobalFont('edit')">図鑑全体に適用</button></div></div>
+
+   <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">レイアウト・比率設定</div>
+   <div class="outer-frame-summary" style="margin:0 0 18px"><button type="button" class="btn primary" onclick="openOuterFrameSettings('edit')">🖼 全画面・外枠設定</button><span id="editOuterFrameSummary" class="help">外側背景・テンプレート・図鑑位置をまとめて設定</span></div>
    <div class="row" style="margin-bottom:14px"><div class="outer-frame-legacy-block"><div><label class="mini">図鑑ボードの外枠比率</label>
        <select id="editAspect" onchange="syncAspectCustom('edit');refreshEditPreview()">
          <option value="4:3" ${b.aspect==='4:3' || !b.aspect?'selected':''}>推奨・横長／iPad横向き (4 : 3)</option>
@@ -4705,11 +4917,13 @@ function openFieldSettings(bookId){
          <div class="template-position-row"><div><div class="mini">図鑑の配置位置</div><select id="editTemplatePosition" onchange="syncTemplatePosition('edit');scheduleFitPreviewBook('edit')"><option value="center">中央</option><option value="top-left">左上</option><option value="top-center">上中央</option><option value="top-right">右上</option><option value="middle-left">左中央</option><option value="middle-right">右中央</option><option value="bottom-left">左下</option><option value="bottom-center">下中央</option><option value="bottom-right">右下</option><option value="custom">数値指定</option></select></div><div id="editTemplateCustomPosition" class="aspect-custom"><input id="editTemplateX" type="number" min="0" max="100" step="0.01" value="50" placeholder="X %" oninput="scheduleFitPreviewBook('edit')"><input id="editTemplateY" type="number" min="0" max="100" step="0.01" value="50" placeholder="Y %" oninput="scheduleFitPreviewBook('edit')"></div></div>
        </div>
      </div></div>
+     <div><label class="mini">図鑑の角丸率</label><input id="editRadius" type="number" min="0" max="120" step="1" value="${b.bookRadius??16}" oninput="refreshEditPreview()"><small>基準サイズ650px時の角丸px。表示サイズに完全比例して拡大・縮小。</small></div>
    </div>
+
+   <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">背景・カラー設定</div>
    <div class="row" style="margin-bottom:14px">
      <div><label class="mini">ヘッダーの背景色</label><input id="editHeaderBg" type="color" value="${b.headerBg||'#fafbfc'}" style="height:38px;padding:2px" oninput="refreshEditPreview()"></div>
      <div><label class="mini">図鑑の背景色 (パネル内)</label><input id="editPanelBg" type="color" value="${b.panelBg||'#ffffff'}" style="height:38px;padding:2px" oninput="refreshEditPreview()"></div>
-     <div><label class="mini">図鑑の角丸率</label><input id="editRadius" type="number" min="0" max="120" step="1" value="${b.bookRadius??16}" oninput="refreshEditPreview()"><small>基準サイズ650px時の角丸px。表示サイズに完全比例して拡大・縮小。</small></div>
    </div>
    <div class="row" style="margin-bottom:14px">
      <div><label class="mini">図鑑背景の表示方法</label><select id="editBackgroundMode" onchange="refreshEditPreview()"><option value="pattern" ${(b.backgroundMode|| (b.backgroundImage?'image':'pattern'))==='pattern'?'selected':''}>色・パターン</option><option value="image" ${(b.backgroundMode|| (b.backgroundImage?'image':'pattern'))==='image'?'selected':''}>画像</option></select></div>
@@ -4745,6 +4959,7 @@ function openFieldSettings(bookId){
      </div>
      <img id="editFullscreenBgPreview" src="${esc(b.fullscreenBgImage||'')}" style="${b.fullscreenBgImage?'display:block;':''}max-height:120px;max-width:240px;margin-top:8px;border:1px solid var(--line);border-radius:8px;object-fit:cover">
    </div>
+   <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">ヘッダー・フッター設定</div>
    <div class="row" style="margin-bottom:14px">
      <div><label class="mini">ヘッダー表示</label><select id="editShowHeader" onchange="refreshEditPreview()"><option value="yes" ${b.showHeader==='yes'?'selected':''}>表示する</option><option value="no" ${b.showHeader==='no'?'selected':''}>表示しない</option></select></div>
      <div><label class="mini">ヘッダーに連動させる項目</label><select id="editHeaderField" onchange="refreshEditPreview()"><option value="">（図鑑タイトルを表示）</option></select></div>
@@ -4775,7 +4990,7 @@ function openFieldSettings(bookId){
        <div class="nav-style-grid">${buildNavStyleCards('edit',b.footerNav||{},'refreshEditPreview')}</div>
      </div>
    </details>
-   <div class="design-section-heading">表示項目</div>
+   <div class="design-section-heading" role="button" tabindex="0" aria-expanded="true" title="クリックで折りたたみ／展開">表示項目</div>
    <div class="field"><label>表示項目の設定</label><p class="help">各項目の設定はカテゴリーごとに色分けしています。「⠿」を掴む、または▲▼ボタンで項目の並び順を変更できます。</p></div>
    <div class="field-list-toolbar">
      <button type="button" class="btn" onclick="setAllFieldLabels('editFields',true)">🏷 ラベルをすべて表示</button><button type="button" class="btn" onclick="setAllFieldLabels('editFields',false)">🏷 ラベルをすべて非表示</button>
@@ -4796,7 +5011,7 @@ function openFieldSettings(bookId){
      <button type="button" class="btn" onclick="exportFieldLayout('edit')">📤 レイアウトを書き出す</button>
      <label class="btn" style="cursor:pointer">📥 レイアウトを読み込む<input type="file" accept="application/json,.json" style="display:none" onchange="importFieldLayoutFile('edit',event)"></label>
    </div>
-   </div><aside class="settings-preview-panel"><label>図鑑ボード・レイアウトプレビュー</label><div class="field" style="margin-bottom:10px"><label class="mini">編集ガイドのグリッド間隔</label><select id="editGridGuideInterval" onchange="refreshEditPreview()"><option value="1">1マスごと（初期値）</option><option value="2">2マスごと</option><option value="3">3マスごと</option><option value="4">4マスごと</option><option value="6">6マスごと</option><option value="8">8マスごと</option></select><small>プレビューに表示するうすいグリッド線の間隔です。配置やサイズには影響しません。</small></div><div class="preview-stage preview-phone" id="editPreviewStage"><div id="editPreview" class="layout-preview"></div></div><div class="help" style="text-align:center;margin-top:6px">図鑑ボード内部のレイアウトだけを表示します。外側背景・配置位置は「全画面・外枠設定」で確認できます。</div><div class="settings-preview-actions"><button class="btn" type="button" onclick="closeModal()">キャンセル</button><button class="btn primary" type="button" onclick="saveFieldSettings('${b.id}')">設定を保存</button></div></aside></div>`;
+   </div><aside class="settings-preview-panel"><label>図鑑ボード・レイアウトプレビュー</label><div class="field grid-guide-field" style="margin-bottom:10px"><label class="mini">編集ガイドのグリッド間隔</label><select id="editGridGuideInterval" onchange="refreshEditPreview()"><option value="1">1マスごと（初期値）</option><option value="2">2マスごと</option><option value="3">3マスごと</option><option value="4">4マスごと</option><option value="6">6マスごと</option><option value="8">8マスごと</option></select><small>プレビューに表示するうすいグリッド線の間隔です。配置やサイズには影響しません。</small></div><div class="preview-stage preview-phone" id="editPreviewStage"><div id="editPreview" class="layout-preview"></div></div><div class="help pc-only-note" style="text-align:center;margin-top:6px">図鑑ボード内部のレイアウトだけを表示します。外側背景・配置位置は「全画面・外枠設定」で確認できます。</div><div class="settings-preview-actions"><button class="btn" type="button" onclick="closeModal()">キャンセル</button><button class="btn primary" type="button" onclick="saveFieldSettings('${b.id}')">設定を保存</button></div></aside></div>`;
  }
  hideLegacyOuterFrameControls('edit');
  syncOuterFrameSummary('edit');
@@ -4810,6 +5025,8 @@ function openFieldSettings(bookId){
  syncTemplatePosition('edit');
  setSettingsSplit('edit',40);
  initFieldHistory('edit');
+ setupMobileDesignNav('edit');
+ restoreDraft('edit',bookId);
 }
 
 function applyGlobalFont(prefix){
@@ -4998,7 +5215,7 @@ function saveFieldSettings(bookId){
  const valid=new Set(newFields.map(f=>f.id));
  b.items.forEach(item=>Object.keys(item).forEach(k=>{if(!valid.has(k))delete item[k]}));
  newFields.forEach(f=>b.items.forEach(item=>{if(!(f.id in item))item[f.id]=''}));
- b.fields=newFields; save(); closeModal(); toast('項目設定を更新しました'); openBook(bookId);
+ b.fields=newFields; save(); clearDraft('edit',bookId); closeModal(); toast('項目設定を更新しました'); openBook(bookId);
  renderLibrary(); renderHome();
 }
 
@@ -5083,9 +5300,555 @@ document.addEventListener('DOMContentLoaded',()=>{
   setActivePage(document.querySelector('.page.active')?.id||'home');
   renderBackupReminders();
   applySettingsI18n();
+  setupMobileDesignNav('create');
 });
 
 window.addEventListener('resize',()=>{if(document.getElementById('createPreview'))fitPreviewBook('create');if(document.getElementById('editPreview'))fitPreviewBook('edit');});
+
+/* =========================================================
+   図鑑作成・編集フォームの大項目：折りたたみ／展開
+   見出し（.design-section-heading）をタップ／クリックすると、
+   次の見出しまでの要素をまとめて隠す／表示する。
+   DOMは移動しないので、入力値やイベントはそのまま保持される。
+   ========================================================= */
+function designSectionMembers(heading){
+  const out=[]; let el=heading.nextElementSibling;
+  while(el && !el.classList.contains('design-section-heading')){ out.push(el); el=el.nextElementSibling; }
+  return out;
+}
+function setDesignSectionCollapsed(heading, collapsed){
+  heading.classList.toggle('sec-collapsed', collapsed);
+  heading.setAttribute('aria-expanded', String(!collapsed));
+  designSectionMembers(heading).forEach(el=>el.classList.toggle('sec-hidden', collapsed));
+}
+function toggleDesignSection(heading){
+  setDesignSectionCollapsed(heading, !heading.classList.contains('sec-collapsed'));
+}
+// 指定要素が属する大項目が折りたたまれていれば展開する（項目へのジャンプや入力エラー時に使用）
+function expandDesignSectionFor(el){
+  let node=el;
+  while(node && node.parentElement && !node.parentElement.matches('.create-settings-editor,.settings-editor')) node=node.parentElement;
+  if(!node || !node.parentElement) return;
+  let h=node;
+  while(h && !(h.classList && h.classList.contains('design-section-heading'))) h=h.previousElementSibling;
+  if(h && h.classList.contains('sec-collapsed')) setDesignSectionCollapsed(h,false);
+}
+document.addEventListener('click',e=>{
+  const h=e.target.closest && e.target.closest('.design-section-heading');
+  if(h) toggleDesignSection(h);
+},true);
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const h=e.target;
+  if(h && h.classList && h.classList.contains('design-section-heading')){ e.preventDefault(); toggleDesignSection(h); }
+});
+// 折りたたまれた大項目の中の必須入力が未入力のままでも、送信が黙って止まらないよう自動展開する
+document.addEventListener('invalid',e=>expandDesignSectionFor(e.target),true);
+/* 全画面・外枠設定モーダル：スマホ幅ではプレビューを常時表示し、設定はボトムシートで開閉する */
+function switchOuterFrameTab(view){
+  const bodyEl=document.querySelector('#outerFrameBackdrop .outer-frame-body');
+  if(!bodyEl) return;
+  bodyEl.classList.toggle('mobile-sheet-open', view==='settings');
+  bodyEl.querySelectorAll('.outer-frame-tabs .btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===view));
+}
+
+/* =========================================================
+   スマホ幅専用：図鑑・項目・デザイン設定の下部「大項目」タブ
+   - 大項目（基本情報／レイアウト・比率／背景・カラー／ヘッダー・フッター）を
+     画面下部に横並びのタブとして常設し、タップした項目だけをボトムシートで
+     クローズアップ表示する。プレビューはシートの裏に常に大きく表示されたまま。
+   - 表示項目（プレビュー上の各項目）へは、大項目タブからではなく
+     プレビュー上の項目を直接ワンタップして開く。タップすると、大項目タブの
+     部分がその項目の「種類・表示／位置・サイズ／文字／色・枠線」タブに切り替わる。
+   ========================================================= */
+const MOBILE_DESIGN_SECTION_ICON={'基本情報':'📘','レイアウト・比率設定':'📐','背景・カラー設定':'🎨','ヘッダー・フッター設定':'🔖'};
+const MOBILE_ITEM_GROUP_META=[
+  {cls:'cat-basic',name:'種類・表示',icon:'🏷'},
+  {cls:'cat-layout',name:'位置・サイズ',icon:'📐'},
+  {cls:'cat-text',name:'文字',icon:'🔤'},
+  {cls:'cat-style',name:'色・枠線',icon:'🎨'}
+];
+
+function isMobileDesignUI(){ return window.matchMedia('(max-width:900px)').matches; }
+
+function setupMobileDesignNav(prefix){
+  const editorId = prefix==='create' ? 'createSettingsEditor' : 'editSettingsEditor';
+  const layoutId = prefix==='create' ? 'createSettingsLayout' : 'editSettingsLayout';
+  const editor=document.getElementById(editorId);
+  const layout=document.getElementById(layoutId);
+  if(!editor || !layout) return;
+
+  // シートのヘッダー（見出し＋閉じるボタン）を先頭に一度だけ挿入
+  let header=editor.querySelector('.mobile-sheet-header');
+  if(!header){
+    header=document.createElement('div');
+    header.className='mobile-sheet-header';
+    header.innerHTML='<strong class="mobile-sheet-title">設定</strong><button type="button" class="mobile-sheet-close" aria-label="閉じる">×</button>';
+    editor.prepend(header);
+    header.querySelector('.mobile-sheet-close').addEventListener('click',()=>{
+      if(editor.dataset.mobileItemMode==='1'){
+        document.querySelectorAll('.layout-item.mobile-selected,.layout-item-multi.mobile-selected').forEach(el=>el.classList.remove('mobile-selected'));
+        closeMobileFieldItem(prefix);
+      }else{
+        closeMobileDesignSheet(prefix);
+      }
+    });
+  }
+
+  // シート上端（ヘッダー）を指でドラッグして高さを変えられるようにする
+  attachSheetResize(header,editor);
+
+  // 大項目タブ（画面下部固定）。プレビューのすぐ隣＝layoutの直下に1つだけ用意する
+  let bar=layout.querySelector(':scope > .mobile-daikoumoku-bar');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.className='mobile-daikoumoku-bar';
+    layout.appendChild(bar);
+  }
+  renderMobileHeadingBar(prefix);
+}
+
+// 大項目タブに、通常の設定見出し（表示項目を除く）を並べる
+function renderMobileHeadingBar(prefix){
+  const editor=document.getElementById(prefix==='create'?'createSettingsEditor':'editSettingsEditor');
+  const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
+  if(!editor || !layout) return;
+  const bar=layout.querySelector(':scope > .mobile-daikoumoku-bar');
+  if(!bar) return;
+  const headings=[...editor.querySelectorAll('.design-section-heading')];
+  bar.innerHTML='';
+  headings.forEach((h,i)=>{
+    const name=h.textContent.trim();
+    if(name==='表示項目') return; // 表示項目へはプレビュー上の項目をタップして開く
+    const icon=MOBILE_DESIGN_SECTION_ICON[name]||'▤';
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.dataset.index=String(i);
+    btn.textContent=icon+' '+name;
+    btn.addEventListener('click',()=>{
+      const isOpenSame = editor.classList.contains('mobile-sheet-open') && editor.dataset.mobileActiveIndex===String(i) && editor.dataset.mobileItemMode!=='1';
+      if(isOpenSame) closeMobileDesignSheet(prefix); else openMobileDesignSection(prefix,i);
+    });
+    bar.appendChild(btn);
+  });
+}
+
+function openMobileDesignSection(prefix,index){
+  const editor=document.getElementById(prefix==='create'?'createSettingsEditor':'editSettingsEditor');
+  const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
+  if(!editor || !layout) return;
+  if(editor.dataset.mobileItemMode==='1'){
+    document.querySelectorAll('.layout-item.mobile-selected,.layout-item-multi.mobile-selected').forEach(el=>el.classList.remove('mobile-selected'));
+    closeMobileFieldItem(prefix);
+  }
+  const headings=[...editor.querySelectorAll('.design-section-heading')];
+  headings.forEach((h,i)=>setDesignSectionCollapsed(h,i!==index));
+  editor.classList.add('mobile-sheet-open');
+  editor.dataset.mobileActiveIndex=String(index);
+  editor.scrollTop=0;
+  const title=editor.querySelector('.mobile-sheet-title');
+  if(title) title.textContent=headings[index]?.textContent.trim()||'設定';
+  const bar=layout.querySelector(':scope > .mobile-daikoumoku-bar');
+  bar?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',Number(b.dataset.index)===index));
+}
+
+function closeMobileDesignSheet(prefix){
+  const editor=document.getElementById(prefix==='create'?'createSettingsEditor':'editSettingsEditor');
+  const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
+  if(!editor) return;
+  editor.classList.remove('mobile-sheet-open');
+  delete editor.dataset.mobileActiveIndex;
+  layout?.querySelector(':scope > .mobile-daikoumoku-bar')?.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+}
+
+/* 表示項目へのアクセス：プレビュー上の項目をワンタップすると、
+   その項目の設定（種類・表示／位置・サイズ／文字／色・枠線）だけを
+   大項目タブ・ボトムシートに表示する「項目編集モード」を開く。 */
+function openMobileFieldItem(prefix, box){
+  const editor=document.getElementById(prefix==='create'?'createSettingsEditor':'editSettingsEditor');
+  const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
+  const fieldsWrap=document.getElementById(prefix==='create'?'fields':'editFields');
+  if(!editor || !layout || !fieldsWrap || !box) return;
+  const headings=[...editor.querySelectorAll('.design-section-heading')];
+  const dispHeading=headings.find(h=>h.textContent.trim()==='表示項目');
+  headings.forEach(h=>setDesignSectionCollapsed(h, h!==dispHeading));
+  fieldsWrap.querySelectorAll('.field-box').forEach(fb=>{
+    const isTarget = fb===box;
+    fb.classList.toggle('mobile-item-hidden', !isTarget);
+    fb.classList.toggle('mobile-item-active', isTarget);
+    if(!isTarget) fb.querySelector('.field-options')?.classList.remove('mobile-item-only');
+  });
+  if(box.classList.contains('collapsed')) toggleFieldCollapse(box);
+  box.querySelector('.field-options')?.classList.add('mobile-item-only');
+  editor.classList.add('mobile-sheet-open');
+  editor.dataset.mobileItemMode='1';
+  editor.dataset.mobileActiveIndex = dispHeading ? String(headings.indexOf(dispHeading)) : '';
+  editor.scrollTop=0;
+  const title=editor.querySelector('.mobile-sheet-title');
+  if(title) title.textContent=(box.querySelector('.f-name')?.value.trim()||'項目')+'の設定';
+  renderMobileItemGroupBar(prefix, box);
+}
+
+// 項目編集モード中は、大項目タブを「種類・表示／位置・サイズ／文字／色・枠線」に差し替える
+function renderMobileItemGroupBar(prefix, box, activeCls){
+  const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
+  const bar=layout?.querySelector(':scope > .mobile-daikoumoku-bar');
+  if(!bar) return;
+  const groups=MOBILE_ITEM_GROUP_META.map(g=>({...g, el:box.querySelector('.field-group.'+g.cls)})).filter(g=>g.el);
+  if(!groups.length) return;
+  const active = (activeCls && groups.some(g=>g.cls===activeCls)) ? activeCls : groups[0].cls;
+  groups.forEach(g=>g.el.classList.toggle('mobile-active-group', g.cls===active));
+  bar.innerHTML='';
+  groups.forEach(g=>{
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent=g.icon+' '+g.name;
+    btn.classList.toggle('active', g.cls===active);
+    btn.addEventListener('click',()=>{
+      groups.forEach(gg=>gg.el.classList.toggle('mobile-active-group', gg.cls===g.cls));
+      bar.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const editor=document.getElementById(prefix==='create'?'createSettingsEditor':'editSettingsEditor');
+      if(editor) editor.scrollTop=0;
+    });
+    bar.appendChild(btn);
+  });
+}
+
+// 項目編集モードを終了し、通常の大項目タブに戻す
+function closeMobileFieldItem(prefix){
+  const editor=document.getElementById(prefix==='create'?'createSettingsEditor':'editSettingsEditor');
+  const layout=document.getElementById(prefix==='create'?'createSettingsLayout':'editSettingsLayout');
+  const fieldsWrap=document.getElementById(prefix==='create'?'fields':'editFields');
+  if(!editor || !layout) return;
+  if(editor.dataset.mobileItemMode!=='1') return;
+  delete editor.dataset.mobileItemMode;
+  fieldsWrap?.querySelectorAll('.field-box').forEach(fb=>{
+    fb.classList.remove('mobile-item-hidden','mobile-item-active');
+    fb.querySelector('.field-options')?.classList.remove('mobile-item-only');
+    fb.querySelectorAll('.field-group').forEach(g=>g.classList.remove('mobile-active-group'));
+  });
+  editor.classList.remove('mobile-sheet-open');
+  delete editor.dataset.mobileActiveIndex;
+  const headings=[...editor.querySelectorAll('.design-section-heading')];
+  headings.forEach(h=>setDesignSectionCollapsed(h,true));
+  renderMobileHeadingBar(prefix);
+}
+
+/* =========================================================
+   スマホ幅専用：プレビュー項目のワンタップ選択／スワイプ移動／ピンチ拡大縮小
+   - 通常のドラッグ（initDragAndDrop）は既存のまま活かしつつ、
+     タップだけを行った場合は選択状態（.mobile-selected）を切り替える。
+   - 2本指ピンチで、選択の有無に関わらずその項目の大きさを変更できる。
+   ========================================================= */
+function mobileItemGetPos(item){
+  if(item.classList.contains('layout-item-multi')){
+    const id=item.dataset.id, slotIndex=parseInt(item.dataset.slot,10)||0;
+    const box=document.querySelector(`.field-box[data-id="${CSS.escape(id)}"]`);
+    if(!box) return null;
+    return {box,slotIndex,multi:true,pos:getMultiPositionFromRow(box,slotIndex)||{x:1,y:1,w:1,h:1}};
+  }
+  const id=item.dataset.id;
+  const box=document.querySelector(`.field-box[data-id="${CSS.escape(id)}"]`);
+  if(!box) return null;
+  return {box,multi:false,pos:{
+    x:parseInt(box.querySelector('.f-x')?.value)||1,
+    y:parseInt(box.querySelector('.f-y')?.value)||1,
+    w:parseInt(box.querySelector('.f-w')?.value)||1,
+    h:parseInt(box.querySelector('.f-h')?.value)||1
+  }};
+}
+function mobileItemSetPos(info,pos){
+  if(info.multi){ setMultiPositionInRow(info.box,info.slotIndex,pos); return; }
+  const wI=info.box.querySelector('.f-w'),hI=info.box.querySelector('.f-h'),xI=info.box.querySelector('.f-x'),yI=info.box.querySelector('.f-y');
+  if(wI)wI.value=pos.w; if(hI)hI.value=pos.h; if(xI)xI.value=pos.x; if(yI)yI.value=pos.y;
+}
+function bindMobileItemInteractions(bodyEl,wrapperId){
+  if(!bodyEl) return;
+  const prefix = wrapperId==='createPreview' ? 'create' : 'edit';
+  const doRefresh=()=>{ prefix==='create' ? refreshCreatePreview() : refreshEditPreview(); };
+  bodyEl.querySelectorAll('.layout-item,.layout-item-multi').forEach(item=>{
+    if(item.dataset.mobileGesturesBound) return;
+    item.dataset.mobileGesturesBound='1';
+
+    // ワンタップ選択：ほぼ動いていない・素早いポインタ操作だけをタップとみなす。
+    // 選択されるまでは移動・リサイズはできない（もう一度タップすると選択解除）。
+    let downX=0,downY=0,downT=0;
+    item.addEventListener('pointerdown',e=>{ downX=e.clientX; downY=e.clientY; downT=Date.now(); },{passive:true});
+    item.addEventListener('pointerup',e=>{
+      if(!isMobileDesignUI()) return;
+      if(Math.hypot(e.clientX-downX,e.clientY-downY)>8) return;
+      if(Date.now()-downT>600) return;
+      const already=item.classList.contains('mobile-selected');
+      bodyEl.querySelectorAll('.mobile-selected').forEach(el=>el.classList.remove('mobile-selected'));
+      if(already){ closeMobileFieldItem(prefix); return; }
+      item.classList.add('mobile-selected');
+      const info=mobileItemGetPos(item);
+      if(info?.box) openMobileFieldItem(prefix, info.box);
+    });
+
+    // ピンチ（2本指）で拡大縮小：ワンタップして選択済みの項目にだけ働く
+    let pinching=false,startDist=0,startInfo=null;
+    item.addEventListener('touchstart',e=>{
+      if(e.touches.length!==2) return;
+      if(!item.classList.contains('mobile-selected')) return;
+      const info=mobileItemGetPos(item); if(!info) return;
+      pinching=true; startInfo=info;
+      const [t1,t2]=e.touches;
+      startDist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY)||1;
+      e.preventDefault();
+    },{passive:false});
+    item.addEventListener('touchmove',e=>{
+      if(!pinching || e.touches.length!==2 || !startInfo) return;
+      e.preventDefault();
+      const [t1,t2]=e.touches;
+      const dist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+      const scale=dist/startDist;
+      const {x,y,w,h}=startInfo.pos;
+      const cx=x+w/2, cy=y+h/2;
+      const nw=Math.max(1,Math.min(48,Math.round(w*scale)));
+      const nh=Math.max(1,Math.min(30,Math.round(h*scale)));
+      const nx=Math.max(1,Math.min(49-nw,Math.round(cx-nw/2)));
+      const ny=Math.max(1,Math.min(31-nh,Math.round(cy-nh/2)));
+      mobileItemSetPos(startInfo,{x:nx,y:ny,w:nw,h:nh});
+      doRefresh();
+    },{passive:false});
+    const endPinch=()=>{ if(!pinching) return; pinching=false; startInfo=null; pushHistorySnapshot(prefix,true); };
+    item.addEventListener('touchend',endPinch);
+    item.addEventListener('touchcancel',endPinch);
+  });
+}
+// プレビュー項目の外側（設定シート・大項目タブの外）をタップしたら選択解除
+document.addEventListener('pointerdown',e=>{
+  if(!isMobileDesignUI()) return;
+  if(e.target.closest && e.target.closest('.layout-item,.layout-item-multi,.settings-editor,.create-settings-editor,.mobile-daikoumoku-bar,.mobile-chukoumoku-bar')) return;
+  const hadSelection=document.querySelector('.layout-item.mobile-selected,.layout-item-multi.mobile-selected');
+  document.querySelectorAll('.layout-item.mobile-selected,.layout-item-multi.mobile-selected').forEach(el=>el.classList.remove('mobile-selected'));
+  if(hadSelection){ closeMobileFieldItem('create'); closeMobileFieldItem('edit'); }
+});
+window.addEventListener('resize',()=>{
+  if(!isMobileDesignUI()){
+    document.getElementById('createSettingsEditor')?.classList.remove('mobile-sheet-open');
+    document.getElementById('editSettingsEditor')?.classList.remove('mobile-sheet-open');
+  }
+});
+
+/* =========================================================
+   ロゴをタップ／クリックでホームへ移動
+   ========================================================= */
+(function bindSiteLogo(){
+  const logo=document.getElementById('siteLogo'); if(!logo) return;
+  const go=()=>showPage('home');
+  logo.addEventListener('click',go);
+  logo.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+})();
+
+/* =========================================================
+   スマホ：ボトムシートの上端（境界面）を指でドラッグして高さを変更
+   - 高さは :root の --sheet-h に入れ、全てのボトムシートで共有する
+   - 次回以降も同じ高さで開けるよう localStorage に控える
+   ========================================================= */
+var sheetHeightPx=null;
+function clampSheetHeight(h){
+  const vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||600;
+  return Math.round(Math.max(160,Math.min(h,vh*0.9)));
+}
+function applySheetHeight(h){
+  sheetHeightPx=clampSheetHeight(h);
+  document.documentElement.style.setProperty('--sheet-h',sheetHeightPx+'px');
+}
+function attachSheetResize(handle,sheet){
+  if(!handle||!sheet||handle.dataset.sheetResize==='1') return;
+  handle.dataset.sheetResize='1';
+  let dragging=false,startY=0,startH=0,pid=null;
+  handle.addEventListener('pointerdown',e=>{
+    if(e.target.closest&&e.target.closest('button,a,input,select,textarea')) return;
+    if(e.pointerType==='mouse'&&e.button!==0) return;
+    dragging=true; pid=e.pointerId; startY=e.clientY; startH=sheet.getBoundingClientRect().height;
+    sheet.classList.add('sheet-dragging'); document.body.classList.add('sheet-dragging');
+    try{ handle.setPointerCapture(pid); }catch(_){}
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove',e=>{
+    if(!dragging||e.pointerId!==pid) return;
+    applySheetHeight(startH+(startY-e.clientY));
+    e.preventDefault();
+  });
+  const end=e=>{
+    if(!dragging) return;
+    if(e&&e.pointerId!==undefined&&pid!==null&&e.pointerId!==pid) return;
+    dragging=false;
+    sheet.classList.remove('sheet-dragging'); document.body.classList.remove('sheet-dragging');
+    try{ handle.releasePointerCapture(pid); }catch(_){}
+    pid=null;
+    try{ if(sheetHeightPx) localStorage.setItem('zukan_sheet_h',String(sheetHeightPx)); }catch(_){}
+  };
+  handle.addEventListener('pointerup',end);
+  handle.addEventListener('pointercancel',end);
+  handle.addEventListener('lostpointercapture',end);
+}
+(function initSheetHeight(){
+  try{ const v=parseFloat(localStorage.getItem('zukan_sheet_h')); if(Number.isFinite(v)&&v>0) applySheetHeight(v); }catch(_){}
+  const reclamp=()=>{ if(sheetHeightPx) applySheetHeight(sheetHeightPx); };
+  window.addEventListener('resize',reclamp);
+  window.addEventListener('orientationchange',reclamp);
+})();
+
+/* =========================================================
+   編集途中の自動保存（下書き）
+   - 図鑑作成／図鑑・項目・デザイン設定（編集）の入力内容・項目の配置を
+     IndexedDB に自動保存し、離脱（ページ移動・リロード・タブ終了）しても
+     次に開いたときに元の状態から続けられるようにする
+   - 「この図鑑を作成」「設定を保存」で確定したら下書きは破棄する
+   ========================================================= */
+var DRAFT_VERSION=1;
+var draftBaseline={create:null,edit:null};
+var draftTimers={create:null,edit:null};
+var draftLastSig={create:'',edit:''};
+var draftHasStored={create:false,edit:false};
+var draftRestoring=false;
+
+function draftKey(prefix,bookId){
+  return prefix==='edit' ? 'draft_edit_'+String(bookId!==undefined&&bookId!==null?bookId:(currentEditBook||'')) : 'draft_create';
+}
+function draftOuterState(prefix){
+  if(prefix!=='create') return null;
+  return {device:outerFrameDeviceDraft.create,scale:outerFrameScaleDraft.create,visible:outerFullscreenOuterVisibleDraft.create,style:outerFrameDraft.create};
+}
+function collectDraftHidden(prefix){
+  const scope=historyScopeElFor(prefix), out={};
+  if(!scope) return out;
+  scope.querySelectorAll('input[type="hidden"][id]').forEach(el=>{
+    if(el.closest('.field-box')) return;
+    out[el.id]=el.value||'';
+  });
+  return out;
+}
+function draftSignature(d){
+  return d.snap+'|'+Object.keys(d.hidden).map(k=>k+':'+d.hidden[k].length+':'+d.hidden[k].slice(-24)).join(',')+'|'+JSON.stringify(d.outer||null);
+}
+function captureDraftBaseline(prefix,snap){
+  try{
+    draftBaseline[prefix]={snap:snap,hidden:JSON.stringify(collectDraftHidden(prefix)),outer:JSON.stringify(draftOuterState(prefix))};
+    draftLastSig[prefix]=''; draftHasStored[prefix]=false;
+  }catch(e){}
+}
+function draftIsDirty(prefix,d){
+  const base=draftBaseline[prefix]; if(!base) return false;
+  return d.snap!==base.snap || JSON.stringify(d.hidden)!==base.hidden || JSON.stringify(d.outer||null)!==base.outer;
+}
+async function saveDraftNow(prefix){
+  clearTimeout(draftTimers[prefix]); draftTimers[prefix]=null;
+  if(!prefix||historyRestoring||draftRestoring||!draftBaseline||!draftBaseline[prefix]) return;
+  if(prefix==='create' && !document.getElementById('fields')) return;
+  if(prefix==='edit' && (!document.getElementById('editFields')||!currentEditBook)) return;
+  const snap=currentFieldsSnapshot(prefix); if(snap==null) return;
+  const d={v:DRAFT_VERSION,t:Date.now(),snap:snap,hidden:collectDraftHidden(prefix),outer:draftOuterState(prefix)};
+  if(prefix==='edit') d.bookId=currentEditBook;
+  const sig=draftSignature(d);
+  if(sig===draftLastSig[prefix]) return;
+  draftLastSig[prefix]=sig;
+  try{
+    if(draftIsDirty(prefix,d)){ await idbSet(draftKey(prefix),d); draftHasStored[prefix]=true; }
+    else if(draftHasStored[prefix]){ await idbDelete(draftKey(prefix)); draftHasStored[prefix]=false; }
+  }catch(e){ draftLastSig[prefix]=''; }
+}
+function scheduleDraftSave(prefix){
+  if(!prefix||historyRestoring||draftRestoring||!draftBaseline||!draftBaseline[prefix]) return;
+  clearTimeout(draftTimers[prefix]);
+  draftTimers[prefix]=setTimeout(()=>saveDraftNow(prefix),700);
+}
+async function clearDraft(prefix,bookId){
+  clearTimeout(draftTimers[prefix]); draftTimers[prefix]=null;
+  const key=draftKey(prefix,bookId);
+  // 確定後に余計な下書きが書き戻されないよう、次の初期化までは保存を止める
+  draftBaseline[prefix]=null; draftLastSig[prefix]=''; draftHasStored[prefix]=false;
+  try{ await idbDelete(key); }catch(e){}
+}
+function applyDraftImagePreviews(prefix){
+  const scope=historyScopeElFor(prefix); if(!scope) return;
+  scope.querySelectorAll('input[type="hidden"][id$="Image"]').forEach(inp=>{
+    const pv=document.getElementById(inp.id.replace(/Image$/,'Preview'));
+    if(!pv||pv.tagName!=='IMG') return;
+    if(inp.value){ pv.src=inp.value; pv.style.display='block'; }
+    else{ pv.removeAttribute('src'); pv.style.display='none'; }
+  });
+}
+function applyDraftState(prefix,state){
+  // state: {snap, hidden, outer}
+  const scope=historyScopeElFor(prefix);
+  draftRestoring=true;
+  try{
+    Object.keys(state.hidden||{}).forEach(id=>{
+      const el=scope?scope.querySelector('#'+CSS.escape(id)):null;
+      if(el&&el.type==='hidden') el.value=state.hidden[id];
+    });
+    if(prefix==='create' && state.outer){
+      if(state.outer.device) outerFrameDeviceDraft.create=state.outer.device;
+      if(Number.isFinite(state.outer.scale)) outerFrameScaleDraft.create=state.outer.scale;
+      if(typeof state.outer.visible==='boolean') outerFullscreenOuterVisibleDraft.create=state.outer.visible;
+      outerFrameDraft.create=state.outer.style||null;
+    }
+    restoreFieldsSnapshot(prefix,state.snap);
+    applyDraftImagePreviews(prefix);
+    try{ syncOuterFrameSummary(prefix); }catch(e){}
+    if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+  }finally{ draftRestoring=false; }
+}
+function showDraftBanner(prefix){
+  document.querySelectorAll('.draft-banner[data-prefix="'+prefix+'"]').forEach(x=>x.remove());
+  const el=document.createElement('div');
+  el.className='draft-banner'; el.dataset.prefix=prefix; el.setAttribute('role','status');
+  el.innerHTML='<span>🕘 前回の編集途中の内容を復元しました。</span><span class="draft-banner-actions"><button type="button" class="btn" data-act="discard">破棄して最初から</button><button type="button" class="btn" data-act="close">閉じる</button></span>';
+  el.querySelector('[data-act="close"]').addEventListener('click',()=>el.remove());
+  el.querySelector('[data-act="discard"]').addEventListener('click',()=>{ discardDraft(prefix); });
+  if(prefix==='create'){
+    const anchor=document.querySelector('#create > .lead')||document.querySelector('#create > h1');
+    if(anchor) anchor.after(el); else document.getElementById('create')?.prepend(el);
+  }else{
+    const modal=document.getElementById('modal');
+    const anchor=modal?.querySelector('h2');
+    if(anchor) anchor.after(el); else modal?.prepend(el);
+  }
+}
+async function restoreDraft(prefix,bookId){
+  let d=null;
+  try{ d=await idbGet(draftKey(prefix,bookId)); }catch(e){ return false; }
+  if(!d||d.v!==DRAFT_VERSION||typeof d.snap!=='string') return false;
+  if(prefix==='edit' && (String(d.bookId)!==String(bookId)||String(currentEditBook)!==String(bookId)||!document.getElementById('editFields'))) return false;
+  if(prefix==='create' && !document.getElementById('fields')) return false;
+  const h=fieldHistory[prefix];
+  if(!h||h.list.length>1||!draftBaseline[prefix]) return false; // すでに操作が始まっている場合は上書きしない
+  try{
+    applyDraftState(prefix,d);
+  }catch(err){ console.warn('draft restore failed',err); return false; }
+  draftHasStored[prefix]=true;
+  pushHistorySnapshot(prefix,true);      // 復元前の状態へ「元に戻す」で戻れるようにする
+  showDraftBanner(prefix);
+  return true;
+}
+async function discardDraft(prefix){
+  const base=draftBaseline[prefix];
+  const bookId=currentEditBook;
+  if(base){
+    let hidden={}, outer=null;
+    try{ hidden=JSON.parse(base.hidden||'{}'); }catch(e){}
+    try{ outer=JSON.parse(base.outer||'null'); }catch(e){}
+    applyDraftState(prefix,{snap:base.snap,hidden:hidden,outer:outer||(prefix==='create'?{device:{phone:null,pc:null},scale:100,visible:true,style:null}:null)});
+    initFieldHistory(prefix);
+  }
+  try{ await idbDelete(draftKey(prefix,bookId)); }catch(e){}
+  draftHasStored[prefix]=false; draftLastSig[prefix]='';
+  document.querySelectorAll('.draft-banner[data-prefix="'+prefix+'"]').forEach(x=>x.remove());
+  toast('編集途中の内容を破棄しました');
+}
+// 入力・変更のたびに（少し待って）保存。ドラッグ移動やサムネ画像など、入力イベントを伴わない変更は定期保存で拾う。
+['input','change'].forEach(evt=>document.addEventListener(evt,()=>{ const p=activeHistoryPrefix(); if(p) scheduleDraftSave(p); },true));
+setInterval(()=>{ if(document.hidden) return; const p=activeHistoryPrefix(); if(p) saveDraftNow(p); },2500);
+function flushDraftsNow(){ ['create','edit'].forEach(p=>{ if(draftTimers[p]||activeHistoryPrefix()===p) saveDraftNow(p); }); }
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) flushDraftsNow(); });
+window.addEventListener('pagehide',flushDraftsNow);
+
 
 </script>
 </body>
