@@ -315,6 +315,10 @@ body.outer-frame-open .settings-editor,body.outer-frame-open .create-settings-ed
   .outer-frame-backdrop.show .outer-frame-panel{width:100vw;height:100dvh;border-radius:0}
   .outer-frame-body{display:flex;flex-direction:column;padding:0;gap:0;overflow:hidden;position:relative;flex:1;min-height:0}
   .outer-frame-tabs{display:none!important}
+  /* 見出し説明文はボトムシート側に移設するため、元のヘッダー部分は隠す（閉じる操作はモバイル用フッターへ集約） */
+  .outer-frame-head{display:none!important}
+  .outer-frame-sheet-title{margin:0 0 14px}
+  .outer-frame-sheet-title h2{font-size:17px}
   /* プレビューは常に表示・画面の主要面積を占める */
   .outer-frame-preview-wrap{order:1;position:relative;top:auto;flex:1;min-height:0;width:100%;box-sizing:border-box;padding:14px;margin:0;display:flex;flex-direction:column}
   .outer-frame-preview-stage{flex:1;height:auto;min-height:0}
@@ -460,7 +464,14 @@ body.sheet-dragging{user-select:none;-webkit-user-select:none}
 
   /* シートの高さ：ドラッグで決めた値(--sheet-h)があればそれを使う。なければ従来どおり最大64vh */
   .settings-editor.mobile-sheet-open,.create-settings-editor.mobile-sheet-open{max-height:var(--sheet-h,64vh);height:var(--sheet-h,auto)}
-  .outer-frame-body.mobile-sheet-open .outer-frame-settings{max-height:var(--sheet-h,64vh);height:var(--sheet-h,auto)}
+  /* 外枠設定のシートは項目数が多い設定編集シートと違い、プレビューの表示面積を
+     優先したいため、初期の高さ（ユーザーがドラッグで変えていない場合の既定値）は
+     他のシートの64vhより低い46vhにする。ドラッグ操作で自由に広げることは引き続き可能。 */
+  .outer-frame-body.mobile-sheet-open .outer-frame-settings{max-height:var(--sheet-h,46vh);height:var(--sheet-h,auto)}
+  /* 外枠設定のボトムシートは常に開いた状態（position:fixed）で画面下部に重なるため、
+     プレビュー欄の下側にシートと同じ高さぶんの余白を確保し、プレビューがシートの
+     裏に隠れず画面上部に収まって全体表示されるようにする。 */
+  .outer-frame-body.mobile-sheet-open .outer-frame-preview-wrap{padding-bottom:calc(var(--sheet-h,46vh) + 14px)}
   .settings-editor.sheet-dragging,.create-settings-editor.sheet-dragging,.outer-frame-settings.sheet-dragging{transition:none}
 
   /* 境界面（シート上端）のつかみ手 */
@@ -1546,6 +1557,19 @@ function openOuterFrameSettings(prefix){
       const grab=document.createElement('div');
       grab.className='sheet-grabber'; grab.setAttribute('aria-label','ドラッグして高さを変更');
       settingsEl.prepend(grab); attachSheetResize(grab,settingsEl,()=>back.querySelector('.outer-frame-mobile-footer')||back.querySelector('.outer-frame-head'));
+      // スマホでは、見出し説明文とプレビュー下の案内文をヘッダー／プレビュー欄から
+      // ボトムシートの先頭へ移動する。プレビューの表示面積を圧迫しないようにするため。
+      const headTitleWrap=back.querySelector('.outer-frame-head > div');
+      const previewHelp=back.querySelector('.outer-frame-preview-wrap > .help');
+      if(headTitleWrap){
+        headTitleWrap.classList.add('outer-frame-sheet-title');
+        grab.insertAdjacentElement('afterend',headTitleWrap);
+      }
+      if(previewHelp){
+        previewHelp.classList.add('outer-frame-sheet-help');
+        previewHelp.style.cssText='margin:0 0 18px;text-align:left';
+        (headTitleWrap||grab).insertAdjacentElement('afterend',previewHelp);
+      }
     }
     // ボトムシートは常に開いた状態で表示する（開閉タブは廃止）
     if(bodyEl) bodyEl.classList.add('mobile-sheet-open');
