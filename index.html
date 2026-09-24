@@ -24,7 +24,10 @@ button,input,textarea,select{font:inherit;font-family:var(--font-body)}button{cu
 header{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 28px;gap:28px;position:sticky;top:0;z-index:20;flex-shrink:0}
 .logo{font-family:var(--font-display);font-weight:800;font-size:21px;letter-spacing:.03em;display:flex;align-items:center;gap:8px}.logo img{width:26px;height:26px;border-radius:6px;display:block}nav{display:flex;gap:5px}nav button{border:0;background:transparent;padding:9px 14px;border-radius:9px;color:#59616c}
 .header-create-actions{display:none;gap:8px;margin-left:auto}
-body.page-create nav button[data-page="home"],body.page-create nav button[data-page="library"],body.page-create nav button[data-page="create"]{display:none}
+/* スマホ・タブレット幅のみ：作成中はヘッダーのタブを隠す（PCではトップ／図鑑ライブラリ／図鑑作成を常に表示） */
+@media(max-width:900px){body.page-create nav button[data-page="home"],body.page-create nav button[data-page="library"],body.page-create nav button[data-page="create"]{display:none}}
+/* PC幅：作成画面ではタブ＋キャンセル／作成ボタンが同居するため、狭めのPCでも収まるよう余白を詰める */
+@media(min-width:901px) and (max-width:1180px){body.page-create header{gap:12px;padding:0 16px}body.page-create nav{gap:2px}body.page-create nav button{padding:8px 9px;white-space:nowrap}body.page-create .header-create-actions .btn{white-space:nowrap}}
 body.page-create .header-create-actions{display:flex}
 nav button.active,nav button:hover{background:var(--accent2);color:var(--accent);font-weight:700}
 main{max-width:1120px;margin:0 auto;padding:38px 22px 80px;flex:1 0 auto;width:100%}.page{display:none}.page.active{display:block}
