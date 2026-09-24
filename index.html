@@ -1211,7 +1211,10 @@ function updateDataStatus(){
   else{el.className='data-status';el.innerHTML=`<strong>${i18nT('loadedCount')(count,esc(dataStoreStatus.source||'IndexedDB'))}</strong>`}
 }
 function exportZukanData(){
-  const blob=new Blob([JSON.stringify(books.map(normalizeBook),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);const d=new Date();a.download=`zukan-backup-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(`${books.length}冊のデータを書き出しました`);
+  const blob=new Blob([JSON.stringify(books.map(normalizeBook),null,2)],{type:'application/json'});
+  const d=new Date();
+  const filename=`zukan-backup-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+  saveBlobFile(blob, filename, `${books.length}冊のデータを書き出しました`);
 }
 function importZukanDataFile(e){
   const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{
@@ -2537,12 +2540,8 @@ function exportFieldLayout(prefix){
   let pretty=snap;
   try{ pretty=JSON.stringify(JSON.parse(snap),null,2); }catch(e){}
   const blob=new Blob([pretty],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`${sanitizeFileName(currentBookTitleFor(prefix))}_レイアウト.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  toast('レイアウト情報を書き出しました');
+  const filename=`${sanitizeFileName(currentBookTitleFor(prefix))}_レイアウト.json`;
+  saveBlobFile(blob, filename, 'レイアウト情報を書き出しました');
 }
 // 図鑑そのもの（登録データ含む全体）を、この図鑑1冊分だけJSONとして書き出す。
 // 配列形式にしているので、そのまま「データを読み込む」から読み込める。
@@ -2550,12 +2549,8 @@ function exportSingleBookData(bookId){
   const b=books.find(x=>x.id===bookId);
   if(!b){ alert('図鑑データが見つかりません'); return; }
   const blob=new Blob([JSON.stringify([normalizeBook(b)],null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`${sanitizeFileName(b.title)}_配布版.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  toast(`「${b.title}」を書き出しました`);
+  const filename=`${sanitizeFileName(b.title)}_配布版.json`;
+  saveBlobFile(blob, filename, `「${b.title}」を書き出しました`);
 }
 // 書き出したレイアウトJSONを読み込み、表示項目・関連する各種設定を復元する。
 function importFieldLayoutFile(prefix, e){
@@ -2718,7 +2713,7 @@ function downloadFrameTemplate(prefix){
   const [px,py]=templatePosition(prefix); let x=(cw-rw)*px/100, y=(ch-rh)*py/100; x=Math.max(margin,Math.min(cw-margin-rw,x)); y=Math.max(margin,Math.min(ch-margin-rh,y));
   ctx.strokeStyle='rgba(255,0,120,.85)';ctx.lineWidth=Math.max(2,Math.round(Math.min(cw,ch)/540));ctx.setLineDash([Math.max(8,Math.round(Math.min(cw,ch)/80)),Math.max(6,Math.round(Math.min(cw,ch)/120))]);ctx.strokeRect(x+.5,y+.5,rw-1,rh-1);
   ctx.setLineDash([]);ctx.fillStyle='rgba(255,0,120,.85)';ctx.font=`bold ${Math.max(14,Math.round(Math.min(cw,ch)/55))}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(`図鑑 ${ratio}`,x+rw/2,Math.max(y-6,20));
-  canvas.toBlob(blob=>{if(!blob)return;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`zukan_template_${ratio.replace(':','x')}_${cw}x${ch}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);},'image/png');
+  canvas.toBlob(blob=>{if(!blob)return;saveBlobFile(blob,`zukan_template_${ratio.replace(':','x')}_${cw}x${ch}.png`);},'image/png');
 }
 
 function readNavFromForm(prefix){
@@ -3797,15 +3792,10 @@ async function exportZukanImage(bookId, index){
   try{
     const canvas = await html2canvas(book, {backgroundColor:null, useCORS:true, scale:Math.min(3, Math.max(2, window.devicePixelRatio||1))});
     await new Promise(resolve=>{
-      canvas.toBlob(blob=>{
+      canvas.toBlob(async blob=>{
         if(!blob){ alert('画像の生成に失敗しました'); resolve(); return; }
-        const a=document.createElement('a');
-        a.href=URL.createObjectURL(blob);
         const safeTitle=(b.title||'zukan').replace(/[\\/:*?"<>|]/g,'_');
-        a.download=`${safeTitle}_No${index+1}.png`;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-        toast('画像を書き出しました');
+        await saveBlobFile(blob, `${safeTitle}_No${index+1}.png`, '画像を書き出しました');
         resolve();
       },'image/png');
     });
@@ -5281,6 +5271,38 @@ function toast(s){
   if(!t)return;
   t.textContent=s;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),1800);
+}
+// ---- スマホでも確実に保存できるようにするための共通の書き出し処理 ----
+// スマホ（特にiOS Safari）では <a download> をクリックしても保存されず、
+// 別タブでファイルが開くだけになることが多いため、
+// ファイル共有に対応した端末ではまず共有シート（Web Share API）を使い、
+// 「ファイルに保存」「写真に保存」などを選べるようにする。
+// 共有APIが使えない/失敗した場合は、従来のダウンロード方式にフォールバックする。
+function isMobileUA(){
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'');
+}
+async function saveBlobFile(blob, filename, toastMsg){
+  try{
+    const file=new File([blob], filename, {type:blob.type||'application/octet-stream'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file]});
+      if(toastMsg) toast(toastMsg);
+      return;
+    }
+  }catch(e){
+    // ユーザーが共有シートをキャンセルした場合は何もしない
+    if(e && e.name==='AbortError') return;
+    // それ以外の失敗時は下のダウンロード方式にフォールバックする
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; a.rel='noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  if(toastMsg) toast(toastMsg);
+  if(isMobileUA() && !navigator.canShare){
+    setTimeout(()=>alert('保存されない場合は、開いた画面の共有ボタン（□に↑のアイコンなど）から「ファイルに保存」または「写真に保存」を選んでください。'),400);
+  }
 }
 
 function applySettingsI18n(){
