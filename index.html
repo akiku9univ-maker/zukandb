@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3464449848266006"
+     crossorigin="anonymous"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZukanDB | 自分だけの図鑑を作れるWebアプリ</title>
@@ -134,7 +136,7 @@ body.fullscreen-mode .book-footer-external{z-index:100002}
    （以前はプレビューが%配置・閲覧がCSS Gridのgap付き配置で、計算式が別々だったため
    　閲覧時だけ見切れる/位置がずれる不具合があった） */
 .detail-grid{position:relative;flex:1;width:100%;height:100%;min-height:0;min-width:0}
-.detail-field{position:absolute;box-sizing:border-box;border:1px solid var(--line);border-radius:calc(10px * var(--book-scale,1));padding:calc(8px * var(--book-scale,1));overflow:hidden;display:flex;flex-direction:column}
+.detail-field{position:absolute;z-index:1;box-sizing:border-box;border:1px solid var(--line);border-radius:calc(10px * var(--book-scale,1));padding:calc(8px * var(--book-scale,1));overflow:hidden;display:flex;flex-direction:column}
 .detail-label{font-family:var(--font-display);font-size:calc(11px * var(--book-scale,1));font-weight:700;opacity:0.8;flex-shrink:0;display:flex;align-items:center;gap:calc(5px * var(--book-scale,1));letter-spacing:.05em}
 .detail-label::before{content:"";width:calc(5px * var(--book-scale,1));height:calc(5px * var(--book-scale,1));border-radius:50%;background:currentColor;opacity:.6;flex-shrink:0}
 .detail-value{margin-top:calc(2px * var(--book-scale,1));overflow:hidden;flex:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;position:relative;font-size:15px;text-align:center;text-decoration:none;}
@@ -445,8 +447,6 @@ body.sheet-dragging{user-select:none;-webkit-user-select:none}
   .book-detail-head .actions .btn:first-child,.book-detail-head .actions .btn:last-child{grid-column:1/-1}
 }
 </style>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3464449848266006"
-     crossorigin="anonymous"></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true">
@@ -870,7 +870,7 @@ body.fullscreen-mode .book-container > *:not(:first-child):not(:last-child){bord
 .book-pattern-check::before{background-image:conic-gradient(from 45deg at 50% 50%,var(--pattern-color1) 0 25%,var(--pattern-color2) 25% 50%,var(--pattern-color1) 50% 75%,var(--pattern-color2) 75% 100%);}
 .book-pattern-grid::before{background-image:linear-gradient(0deg,var(--pattern-color1) calc(var(--pattern-line,1px) * var(--book-scale,1)),transparent 0),linear-gradient(90deg,var(--pattern-color1) calc(var(--pattern-line,1px) * var(--book-scale,1)),transparent 0);}
 .book-pattern-border::before{background-image:repeating-linear-gradient(0deg,var(--pattern-color1) 0 calc(var(--pattern-line,1px) * var(--book-scale,1)),transparent calc(var(--pattern-line,1px) * var(--book-scale,1)) calc(var(--pattern-size,32px) * var(--book-scale,1)));background-size:100% calc(var(--pattern-size,32px) * var(--book-scale,1));}
-.book-pattern-check > *,.book-pattern-grid > *,.book-pattern-border > *{position:relative;z-index:1;}
+.book-pattern-check > :where(:not(.detail-field,.layout-item,.layout-item-multi,.book-view-resize-handle)),.book-pattern-grid > :where(:not(.detail-field,.layout-item,.layout-item-multi,.book-view-resize-handle)),.book-pattern-border > :where(:not(.detail-field,.layout-item,.layout-item-multi,.book-view-resize-handle)){position:relative;z-index:1;}
 .detail-grid.book-pattern-check, .detail-grid.book-pattern-grid, .detail-grid.book-pattern-border { border-radius:6px; }
 
 `;
@@ -3449,7 +3449,13 @@ function itemCard(b,it,i){
  const img=imageField?it[imageField.id]:'';
  const titleField=b.fields.find(f=>f.name==='タイトル'||f.name==='名前')||b.fields.find(f=>f.type==='text');
  const title=titleField?it[titleField.id]||'名称未設定':'No.'+(i+1);
- return `<div class="card" role="button" tabindex="0" onclick="openPokemonView('${b.id}',${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPokemonView('${b.id}',${i})}"><div class="thumb">${img?`<img src="${esc(img)}" style="width:100%;height:100%;object-fit:contain;">`:'◇'}</div><div class="card-body"><div class="num">No.${esc(String(it[b.fields[0]?.id]||i+1))}</div><div class="title">${esc(title)}</div><div style="margin-top:8px"><span class="help">登録データを開く</span></div></div></div>`;
+ // 「No.」表示は先頭フィールド(fields[0])を数値項目とみなしていたが、
+ // 画像フィールドなどが先頭に来るデータでは中身(base64画像等)がそのまま表示され崩れてしまうため、
+ // type==='number'のフィールドを明示的に探し、無ければ連番にフォールバックする。
+ const numberField=b.fields.find(f=>f.type==='number');
+ const numberRaw=numberField?it[numberField.id]:null;
+ const numberVal=(numberRaw!==undefined&&numberRaw!==null&&String(numberRaw).trim()!=='')?numberRaw:(i+1);
+ return `<div class="card" role="button" tabindex="0" onclick="openPokemonView('${b.id}',${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPokemonView('${b.id}',${i})}"><div class="thumb">${img?`<img src="${esc(img)}" style="width:100%;height:100%;object-fit:contain;">`:'◇'}</div><div class="card-body"><div class="num">No.${esc(String(numberVal))}</div><div class="title">${esc(title)}</div><div style="margin-top:8px"><span class="help">登録データを開く</span></div></div></div>`;
 }
 
 function openPokemonView(bookId, index, fullscreen=false){
