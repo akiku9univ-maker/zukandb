@@ -483,7 +483,7 @@ body.sheet-dragging{user-select:none;-webkit-user-select:none}
 
 <section id="library" class="page">
   <h1>図鑑ライブラリ</h1><p class="lead">今まで作った図鑑の一覧です。</p>
-  <div class="toolbar"><input id="search" placeholder="図鑑を検索…" oninput="renderLibrary()"><button class="btn primary" onclick="showPage('create')">＋ 新しい図鑑</button><button class="btn" type="button" onclick="exportZukanData()">⬇ データを書き出す</button><label class="btn" style="cursor:pointer">⬆ データを読み込む<input id="importZukanDataFile" type="file" accept="application/json,.json" style="display:none" onchange="importZukanDataFile(event)"></label></div>
+  <div class="toolbar"><input id="search" placeholder="図鑑を検索…" oninput="renderLibrary()"><button class="btn primary" onclick="showPage('create')">＋ 新しい図鑑</button><button class="btn" type="button" onclick="exportZukanData()">⬇ データを書き出す</button><label class="btn" style="cursor:pointer">⬆ データを読み込む<input id="importZukanDataFile" type="file" accept="application/json,.json" style="display:none" onchange="importZukanDataFile(event)"></label><button class="btn" type="button" onclick="showExportHelp()" title="保存できないときは">保存できないときは？</button></div>
   <div class="backup-reminder-text" style="margin:0 0 10px;font-size:13px;line-height:1.6;color:#8a6a1f;background:#fff8e0;border:1px solid #f0e0b0;border-radius:10px;padding:10px 14px"></div>
   <div id="dataStatus" class="data-status" aria-live="polite"></div>
   <div id="libraryList" class="grid"></div>
@@ -663,6 +663,7 @@ body.sheet-dragging{user-select:none;-webkit-user-select:none}
   <h1>設定</h1><p class="lead">データはブラウザ内に保存されます。</p>
     <div class="settings-item" style="margin-top:20px;"><h3>サンプルデータ</h3><p>動作確認用の図鑑を追加します。</p><button class="btn" onclick="addSample()">サンプルを追加</button></div>
   <div class="settings-item" style="margin-top:20px;"><h3 class="i18n-font-title">フォント</h3><p class="i18n-font-desc">フォントファイル（.ttf/.otf/.woff/.woff2）を登録すると、項目のフォント選択で「カスタムフォント」として使えます。フォントの利用規約・ライセンスは各自ご確認ください。</p><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="handleCustomFontFile(event)"><button class="btn i18n-font-clear" onclick="clearCustomFont()">登録フォントを削除</button></div></div>
+  <div class="settings-item" style="margin-top:20px;"><h3>ファイルの保存について</h3><p>書き出したファイルがGoogleドライブに保存できない場合は、共有メニューの「ドライブ」アイコンを直接タップせず、「ファイルに保存」を選んでから保存先で「Google Drive」を指定してください。</p><button class="btn" onclick="showExportHelp()">詳しい手順を見る</button></div>
   <div class="settings-item" style="margin-top:20px;"><h3>データをリセット</h3><p>保存されている図鑑をすべて削除します。</p><button class="btn danger" onclick="resetData()">全データを削除</button></div>
 </section>
 
@@ -5285,7 +5286,9 @@ async function saveBlobFile(blob, filename, toastMsg){
   try{
     const file=new File([blob], filename, {type:blob.type||'application/octet-stream'});
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({files:[file]});
+      // title/textを付けると、共有先アプリ（特にGoogleドライブなど）がファイルを
+      // 正しく認識しやすくなることがあるため付与しておく。
+      await navigator.share({files:[file], title:filename, text:filename});
       if(toastMsg) toast(toastMsg);
       return;
     }
@@ -5303,6 +5306,15 @@ async function saveBlobFile(blob, filename, toastMsg){
   if(isMobileUA() && !navigator.canShare){
     setTimeout(()=>alert('保存されない場合は、開いた画面の共有ボタン（□に↑のアイコンなど）から「ファイルに保存」または「写真に保存」を選んでください。'),400);
   }
+}
+// 共有メニューでの保存方法についての補足（特にGoogleドライブへの保存でつまずきやすいため）を表示する。
+function showExportHelp(){
+  alert(
+    'うまく保存できないときは\n\n'+
+    '・共有メニューが開いたら「ファイルに保存」を選び、保存先の一覧から「Google Drive」を選んで保存してください。\n\n'+
+    '・共有メニューに出てくる「ドライブ」アイコンを直接タップすると、Googleドライブアプリ側の制限により保存に失敗することがあります（「ファイルに保存」経由なら安定して保存できます）。\n\n'+
+    '・「Google Drive」が保存先の一覧に出てこない場合は、iPhoneの「設定」→「ファイル」→「このアプリケーションを許可」からGoogle Driveを有効にしてください。'
+  );
 }
 
 function applySettingsI18n(){
