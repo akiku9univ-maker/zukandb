@@ -1119,6 +1119,12 @@ function idbDelete(key){
     req.onsuccess=()=>resolve(true); req.onerror=()=>reject(req.error||new Error('IndexedDB delete failed'));
   }));
 }
+// 保存系の失敗を握りつぶさず、必ずユーザーが気づける形（トースト＋console.error）で通知するための共通関数。
+// context: 「どの操作で失敗したか」を示す短い日本語ラベル。
+function notifyStorageError(context,err){
+  console.error(context+'に失敗しました:',err);
+  try{ toast(`⚠️ ${context}に失敗しました。${err&&err.message?err.message:''}`); }catch(e){}
+}
 // 呼び出し側の互換性のため同期関数のままにしつつ、実際の書き込みはIndexedDBへ非同期で行う。
 function save(){
   idbSet(IDB_BOOKS_KEY,books).then(()=>{
@@ -1155,7 +1161,8 @@ async function initAppData(){
       const legacy=migrateLegacyLocalStorageBooks();
       if(legacy){
         stored=legacy.data;
-        try{ await idbSet(IDB_BOOKS_KEY,stored); clearLegacyLocalStorageBooks(); }catch(e){}
+        try{ await idbSet(IDB_BOOKS_KEY,stored); clearLegacyLocalStorageBooks(); }
+        catch(e){ notifyStorageError('旧データの引き継ぎ保存',e); }
       }
     }
     if(Array.isArray(stored)){
@@ -1188,7 +1195,8 @@ function handleCustomFontFile(e){
   e.target.value='';
 }
 function clearCustomFont(){
-  idbDelete(IDB_FONT_KEY).then(()=>{ applyCustomFont(); toast(i18nT('fontCleared')); }).catch(()=>{});
+  idbDelete(IDB_FONT_KEY).then(()=>{ applyCustomFont(); toast(i18nT('fontCleared')); })
+    .catch(e=>notifyStorageError('フォントの削除',e));
 }
 applyCustomFont();
 function normalizeBook(raw){
@@ -1476,7 +1484,7 @@ function outerFramePositionValue(prefix){
 }
 function readOuterFramePosition(prefix){return outerFramePositionValue(prefix)}
 function syncOuterFrameSummary(prefix){
-  const asp=prefix==='create'?getCreateAspectValue():getEditAspectValue();
+  const asp=getAspectValue(prefix);
   const mode=outerEl(prefix,'bgMode')?.value||'color';
   const pos=outerFramePositionValue(prefix);
   const radius=Number(outerEl(prefix,'radius')?.value || document.getElementById(prefix==='create'?'bookRadius':'editRadius')?.value || 16); const fs=outerFrameStyleValue(prefix); const frameText=fs.mode==='shadow'?'影':fs.mode==='border'?`縁 ${fs.width.toFixed(2)}px`:'なし'; const text=`図鑑 ${asp} ／ 外側 ${mode==='image'?'画像':'色'} ／ 位置 ${pos.x.toFixed(2)}%・${pos.y.toFixed(2)}% ／ 拡大率 ${outerFrameScaleValue(prefix).toFixed(0)}% ／ 角丸 ${radius.toFixed(0)}px ／ 枠 ${frameText}`;
@@ -1502,7 +1510,7 @@ function syncOuterFrameToForm(prefix){
   outerFrameDraft[prefix]=normalizeOuterFrameStyle({mode:document.getElementById('outerFrameStyleMode')?.value,color:document.getElementById('outerFrameBorderColor')?.value,width:document.getElementById('outerFrameBorderWidth')?.value});
   set('templatePreset',document.getElementById('outerTemplatePreset').value); set('templateW',document.getElementById('outerTemplateW').value); set('templateH',document.getElementById('outerTemplateH').value); set('templatePosition',document.getElementById('outerTemplatePosition').value); set('templateX',document.getElementById('outerTemplateX').value); set('templateY',document.getElementById('outerTemplateY').value);
   set('bgMode',document.getElementById('outerBgMode').value); set('bgColor',document.getElementById('outerBgColor').value); set('bgImage',document.getElementById('outerBgImage').value);
-  syncTemplatePosition(prefix); if(prefix==='create')refreshCreatePreview();else refreshEditPreview(); syncOuterFrameSummary(prefix); syncOuterPopupPreview(prefix);
+  syncTemplatePosition(prefix); refreshPreview(prefix); syncOuterFrameSummary(prefix); syncOuterPopupPreview(prefix);
 }
 function syncOuterPopupVisibility(){
   const a=document.getElementById('outerAspect'), custom=document.getElementById('outerAspectCustom'), tp=document.getElementById('outerTemplatePreset'), tc=document.getElementById('outerTemplateCustom'), pos=document.getElementById('outerTemplatePosition'), pc=document.getElementById('outerTemplateCustomPosition'), mode=document.getElementById('outerBgMode'), color=document.getElementById('outerBgColor'), file=document.getElementById('outerBgFileWrap');
@@ -1634,7 +1642,7 @@ function applyOuterFrameSettings(){
       save();
     }
   }
-  if(prefix==='create')refreshCreatePreview();else refreshEditPreview();
+  refreshPreview(prefix);
   syncOuterFrameSummary(prefix);
   syncOuterPopupPreview(prefix);
   const note=document.getElementById('outerDeviceFallbackNote');
@@ -1741,7 +1749,7 @@ function syncOuterPopupPreview(prefix){
     ? {preset:'custom',x:Number.isFinite(popupX)?Math.max(0,Math.min(100,popupX)):50,y:Number.isFinite(popupY)?Math.max(0,Math.min(100,popupY)):50}
     : outerFramePositionValue(prefix)) : outerFramePositionValue(prefix));
   const rect=outerBackgroundRect(st,img);
-  const ratio=parseAspect(prefix==='create'?getCreateAspectValue():getEditAspectValue());
+  const ratio=parseAspect(getAspectValue(prefix));
   const zoom=outerFrameScaleValue(prefix)/100;
   let bw=rect.w*.82*zoom,bh=bw*ratio.h/ratio.w;
   if(zoom<=1 && bh>rect.h*.82){bh=rect.h*.82;bw=bh*ratio.w/ratio.h;}
@@ -1980,7 +1988,7 @@ function initFieldListControls(box){
     box.dataset.useList = box.dataset.useList==='1' ? '0' : '1';
     syncActiveUI();
     const prefix = box.closest('#editFields') ? 'edit' : 'create';
-    if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+    refreshPreview(prefix);
     pushHistorySnapshot(prefix, false);
   };
   if(configureBtn) configureBtn.onclick = ()=>openFieldListOptions(box);
@@ -2043,7 +2051,7 @@ function renderMultiPositionRows(box){
   container.querySelectorAll('.field-multi-position-row').forEach(row=>{
     row.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{
       syncMultiPositionsFromRows(box);
-      if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+      refreshPreview(prefix);
       pushHistorySnapshot(prefix, false);
     }));
   });
@@ -2083,7 +2091,7 @@ function initFieldMultiControls(box){
     syncEnabledUI();
     renderMultiPositionRows(box);
     const prefix=prefixOf();
-    if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+    refreshPreview(prefix);
     pushHistorySnapshot(prefix, false);
   });
   [minInput,maxInput].forEach(inp=>{
@@ -2093,7 +2101,7 @@ function initFieldMultiControls(box){
       if(minV>maxV){ maxV=minV; maxInput.value=maxV; }
       renderMultiPositionRows(box);
       const prefix=prefixOf();
-      if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+      refreshPreview(prefix);
       pushHistorySnapshot(prefix, false);
     });
   });
@@ -2214,7 +2222,7 @@ function saveListOptionsFromModal(){
   box.dataset.listOptions = JSON.stringify(opts);
   if(box._syncFieldListUI) box._syncFieldListUI();
   const prefix = box.closest('#editFields') ? 'edit' : 'create';
-  if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+  refreshPreview(prefix);
   pushHistorySnapshot(prefix, true);
   closeListOptionsModal();
   toast('選択肢を保存しました');
@@ -2338,7 +2346,7 @@ function applyBulkFieldEdit(){
     });
   });
   closeBulkFieldEdit();
-  if(prefix === 'create') refreshCreatePreview(); else refreshEditPreview();
+  refreshPreview(prefix);
   pushHistorySnapshot(prefix, true);
   toast(appliedParams ? `${boxes.length}件の項目に一括変更を適用しました` : '変更したい設定にチェックを入れてください');
 }
@@ -2742,29 +2750,27 @@ function computeFieldAspect(book, field){
   return (isFinite(ratio) && ratio > 0) ? ratio : NaN;
 }
 
-function getCreateAspectValue(){
-  const sel=document.getElementById('bookAspect');
+// create/edit共通の縦横比取得ロジック。以前はgetCreateAspectValue/getEditAspectValueとして
+// ほぼ同一の実装が2つ存在していた。idの接頭辞(book/edit)だけをprefixで切り替える。
+function getAspectValue(prefix){
+  const isEdit = prefix==='edit';
+  const idPrefix = isEdit ? 'edit' : 'book';
+  const sel=document.getElementById(idPrefix+'Aspect');
   if(!sel) return '4:3';
   if(sel.value!=='custom') return sel.value;
-  const w=parseFloat(document.getElementById('bookAspectW')?.value)||4;
-  const h=parseFloat(document.getElementById('bookAspectH')?.value)||3;
+  const w=parseFloat(document.getElementById(idPrefix+'AspectW')?.value)||(isEdit?2:4);
+  const h=parseFloat(document.getElementById(idPrefix+'AspectH')?.value)||3;
   return `${w}:${h}`;
 }
-function getEditAspectValue(){
-  const sel=document.getElementById('editAspect');
-  if(!sel) return '4:3';
-  if(sel.value!=='custom') return sel.value;
-  const w=parseFloat(document.getElementById('editAspectW')?.value)||2;
-  const h=parseFloat(document.getElementById('editAspectH')?.value)||3;
-  return `${w}:${h}`;
-}
+function getCreateAspectValue(){ return getAspectValue('create'); }
+function getEditAspectValue(){ return getAspectValue('edit'); }
 function syncAspectCustom(prefix){
   const sel=document.getElementById(prefix+'Aspect');
   const box=document.getElementById(prefix+'AspectCustom');
   if(box) box.classList.toggle('show',sel?.value==='custom');
 }
 function templateRatioFromForm(prefix){
-  return prefix==='edit' ? getEditAspectValue() : getCreateAspectValue();
+  return getAspectValue(prefix);
 }
 function syncTemplatePosition(prefix){
   const sel=document.getElementById(prefix+'TemplatePosition');
@@ -2834,7 +2840,7 @@ function fitPreviewBook(prefix){
   const stage=document.getElementById(prefix==='create'?'createPreviewStage':'editPreviewStage');
   const book=document.getElementById(prefix==='create'?'createPreview':'editPreview');
   if(!stage||!book)return;
-  const ratio=parseAspect(prefix==='create'?getCreateAspectValue():getEditAspectValue());
+  const ratio=parseAspect(getAspectValue(prefix));
   const panel=stage.parentElement;
   const cs=window.getComputedStyle(stage);
   const padX=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0)+(parseFloat(cs.borderLeftWidth)||0)+(parseFloat(cs.borderRightWidth)||0);
@@ -2962,44 +2968,71 @@ function setSettingsSplit(prefix,value){
 }
 
 
-function refreshCreatePreview(){
+// create（作成）／edit（編集）共通のプレビュー描画ロジック。
+// 以前はrefreshCreatePreview/refreshEditPreviewとしてほぼ丸ごと二重実装されており、
+// 修正のたびに2箇所を揃える必要があった。実装をこの1関数に統合し、
+// prefix('create'|'edit')によって「idの接頭辞」と「編集画面だけが持つ、既存データ(b)へのフォールバック」を
+// 切り替えるだけにした。refreshCreatePreview/refreshEditPreviewは後方互換のための薄いラッパーとして残す。
+function refreshPreview(prefix){
+  const isEdit = prefix==='edit';
+  const idPrefix = isEdit ? 'edit' : 'book'; // フォーム要素のid接頭辞（既存のid命名規則に合わせる）
+  const previewId = isEdit ? 'editPreview' : 'createPreview';
+  const bodyId = isEdit ? 'editPreviewBody' : 'createPreviewBody';
+  const fieldsContainer = isEdit ? 'editFields' : 'fields';
+  const id = s => idPrefix + s; // 例: id('Pattern') => 'bookPattern' / 'editPattern'
+  const val = s => document.getElementById(id(s))?.value;
+
   bindPositionDragInputs();
-  const el=document.getElementById('createPreview');if(!el)return;
-  syncBackgroundSourceUI('book');
-  updatePreviewStage('create');
-  const aspectStr=getCreateAspectValue(), panelBg=document.getElementById('bookPanelBg')?.value||'#fff';
-  const bookRadius=Math.max(0,Math.min(120,parseFloat(document.getElementById('bookRadius')?.value)||0));
-  const pattern=document.getElementById('bookPattern')?.value||'plain', patternColor=document.getElementById('bookPatternColor')?.value||'#dfe3e8', backgroundMode=document.getElementById('bookBackgroundMode')?.value||'pattern';
-  const backgroundImage=document.getElementById('bookBackgroundImage')?.value||'', headerBg=document.getElementById('bookHeaderBg')?.value||'#fafbfc';
-  const showHeader=document.getElementById('bookShowHeader')?.value||'yes', showFooter=document.getElementById('bookShowFooter')?.value||'yes', bookTitle=document.getElementById('bookTitle')?.value||'図鑑タイトル';
-  const headerTextColor=document.getElementById('bookHeaderTextColor')?.value||'#20242a', headerFontSize=parseFloat(document.getElementById('bookHeaderFontSize')?.value)||13, headerFontFamily=fontFamilyCss(document.getElementById('bookHeaderFontFamily')?.value||'display'), headerAlign=textAlignCss(document.getElementById('bookHeaderTextAlign')?.value||'left'), headerTextX=Math.max(-200,Math.min(200,parseFloat(document.getElementById('bookHeaderTextX')?.value)||0));
-  const footerTextColor=document.getElementById('bookFooterTextColor')?.value||'#737b86', footerBg=document.getElementById('bookFooterBg')?.value||headerBg, footerFontSize=parseFloat(document.getElementById('bookFooterFontSize')?.value)||11, footerFontFamily=fontFamilyCss(document.getElementById('bookFooterFontFamily')?.value||'display'), footerAlign=textAlignCss(document.getElementById('bookFooterTextAlign')?.value||'center'), footerTextX=Math.max(-200,Math.min(200,parseFloat(document.getElementById('bookFooterTextX')?.value)||0));
-  const nav=readNavFromForm('book'); const asp=parseAspect(aspectStr); const gridInterval=Math.max(1,parseInt(document.getElementById('bookGridGuideInterval')?.value)||1); const guideW=(100/48)*gridInterval, guideH=guideW*asp.w/asp.h;
+  const el=document.getElementById(previewId); if(!el) return;
+  syncBackgroundSourceUI(idPrefix);
+  const b = isEdit ? books.find(x=>x.id===currentEditBook) : null;
+  updatePreviewStage(prefix);
+
+  const aspectStr = getAspectValue(prefix);
+  const panelBg = val('PanelBg') || '#fff';
+  const bookRadius = Math.max(0,Math.min(120, parseFloat(val('Radius')) || (isEdit ? (b?.bookRadius??16) : 0)));
+  const pattern = val('Pattern') || 'plain';
+  const backgroundMode = val('BackgroundMode') || (isEdit ? (b?.backgroundMode||(b?.backgroundImage?'image':'pattern')) : 'pattern');
+  const patternColor = val('PatternColor') || '#dfe3e8';
+  const backgroundImage = val('BackgroundImage') || '';
+  const headerBg = val('HeaderBg') || '#fafbfc';
+  const showHeader = val('ShowHeader') || 'yes';
+  const showFooter = isEdit ? (b?.showFooter!=='no'?'yes':'no') : (val('ShowFooter') || 'yes');
+  const headerFieldId = val('HeaderField') || '';
+  const bookTitle = (isEdit ? val('BookTitle') : val('Title')) || (isEdit ? (b?b.title:'図鑑タイトル') : '図鑑タイトル');
+
+  const headerTextColor = val('HeaderTextColor') || (isEdit ? (b?.headerTextColor||'#20242a') : '#20242a');
+  const headerFontSize = parseFloat(val('HeaderFontSize')) || (isEdit ? (b?.headerFontSize||13) : 13);
+  const headerFontFamily = fontFamilyCss(val('HeaderFontFamily') || (isEdit ? (b?.headerFontFamily||'display') : 'display'));
+  const headerAlign = textAlignCss(val('HeaderTextAlign') || (isEdit ? (b?.headerTextAlign||'left') : 'left'));
+  const headerTextX = Math.max(-200,Math.min(200, parseFloat(val('HeaderTextX') ?? (isEdit ? (b?.headerTextX??0) : 0)) || 0));
+
+  const footerTextColor = val('FooterTextColor') || (isEdit ? (b?.footerTextColor||'#737b86') : '#737b86');
+  const footerBg = val('FooterBg') || (isEdit ? (b?.footerBg||headerBg) : headerBg);
+  const footerFontSize = parseFloat(val('FooterFontSize')) || (isEdit ? (b?.footerFontSize||11) : 11);
+  const footerFontFamily = fontFamilyCss(val('FooterFontFamily') || (isEdit ? (b?.footerFontFamily||'display') : 'display'));
+  const footerAlign = textAlignCss(val('FooterTextAlign') || (isEdit ? (b?.footerTextAlign||'center') : 'center'));
+  const footerTextX = Math.max(-200,Math.min(200, parseFloat(val('FooterTextX') ?? (isEdit ? (b?.footerTextX??0) : 0)) || 0));
+
+  const nav=readNavFromForm(idPrefix);
+  const asp=parseAspect(aspectStr);
+  const gridInterval=Math.max(1,parseInt(val('GridGuideInterval'))||1);
+  const guideW=(100/48)*gridInterval, guideH=guideW*asp.w/asp.h;
   el.style.setProperty('--guide-cell-w',guideW.toFixed(6)+'%'); el.style.setProperty('--guide-cell-h',guideH.toFixed(6)+'%');
   el.style.aspectRatio=`${asp.w} / ${asp.h}`; el.style.backgroundColor=panelBg; el.style.setProperty('--book-radius-base',bookRadius+'px'); el.style.setProperty('--pattern-color1',patternColor); el.style.setProperty('--pattern-color2',panelBg); el.style.backgroundImage='none';
   el.classList.remove('book-pattern-plain','book-pattern-check','book-pattern-grid','book-pattern-border','book-pattern-check-even','book-pattern-cross-dots');
 
   const button=(k,fallback,disabled=false)=>`<button class="btn" ${disabled?'disabled':''} style="color:${nav[k+'Color']};background:${nav[k+'Bg']};border-color:${nav[k+'Bg']};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));">${esc(nav[k+'Label']||fallback)}</button>`;
-  const headerHtml=showHeader==='yes'?`<div class="book-header" style="background:${headerBg};color:${headerTextColor};font-family:${headerFontFamily};font-size:calc(${headerFontSize}px * var(--book-scale,1));text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)));"><span style="font-family:${headerFontFamily};text-align:${headerAlign};display:inline-flex;align-items:center;gap:4px">${esc(document.getElementById('bookHeaderText')?.value||bookTitle)}</span><span style="font-family:${headerFontFamily};text-align:right">No. 1 / 1</span></div>`:'';
-  const footerHtml=showFooter==='yes'?`<div class="book-footer" style="background:${footerBg};color:${footerTextColor};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));padding:calc(4px * var(--book-scale,1)) calc(6px * var(--book-scale,1));min-height:calc(34px * var(--book-scale,1));text-align:${footerAlign}"><div class="footer-nav" style="transform:translateX(calc(${footerTextX}px * var(--book-scale,1)))"><div class="footer-title">${esc(document.getElementById('bookFooterText')?.value||bookTitle)}</div><div class="footer-actions">${button('prev','〈 前へ',true)}${button('edit','編集')}${button('delete','削除')}${button('next','次へ 〉',true)}</div></div></div>`:'';
-  const headerFieldId=document.getElementById('bookHeaderField')?.value||''; const fields=collectFields('fields').filter(f=>f.id!==headerFieldId);
-  el.innerHTML=`${headerHtml}<div class="preview-body-area" id="createPreviewBody">${fields.map(f=>layoutBoxHtml(f,null)).join('')}</div>${footerHtml}`; applyPreviewBackground('createPreview',backgroundImage,pattern,patternColor,panelBg,backgroundMode,{size:document.getElementById('bookPatternSize')?.value,line:document.getElementById('bookPatternLineWidth')?.value,gap:document.getElementById('bookPatternGap')?.value,angle:document.getElementById('bookPatternAngle')?.value}); initDragAndDrop('createPreviewBody','createPreview'); scheduleFitPreviewBook('create'); installPreviewScaleObservers();
+  const pageCount = isEdit ? (b?.items?.length||1) : 1;
+  const headerHtml=showHeader==='yes'?`<div class="book-header" style="background:${headerBg};color:${headerTextColor};font-family:${headerFontFamily};font-size:calc(${headerFontSize}px * var(--book-scale,1));text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)));"><span style="font-family:${headerFontFamily};text-align:${headerAlign};display:inline-flex;align-items:center;gap:4px">${esc(val('HeaderText')||bookTitle)}</span><span style="font-family:${headerFontFamily};text-align:right">No. 1 / ${pageCount}</span></div>`:'';
+  const footerHtml=showFooter==='yes'?`<div class="book-footer" style="background:${footerBg};color:${footerTextColor};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));padding:calc(4px * var(--book-scale,1)) calc(6px * var(--book-scale,1));min-height:calc(34px * var(--book-scale,1));text-align:${footerAlign}"><div class="footer-nav" style="transform:translateX(calc(${footerTextX}px * var(--book-scale,1)))"><div class="footer-title">${esc(val('FooterText')||bookTitle)}</div><div class="footer-actions">${button('prev','〈 前へ',true)}${button('edit','編集')}${button('delete','削除')}${button('next','次へ 〉',true)}</div></div></div>`:'';
+  const fields=collectFields(fieldsContainer).filter(f=>f.id!==headerFieldId);
+  el.innerHTML=`${headerHtml}<div class="preview-body-area" id="${bodyId}">${fields.map(f=>layoutBoxHtml(f,null)).join('')}</div>${footerHtml}`;
+  applyPreviewBackground(previewId,backgroundImage,pattern,patternColor,panelBg,backgroundMode,{size:val('PatternSize'),line:val('PatternLineWidth'),gap:val('PatternGap'),angle:val('PatternAngle')});
+  initDragAndDrop(bodyId,previewId); scheduleFitPreviewBook(prefix); installPreviewScaleObservers();
 }
-
-function refreshEditPreview(){
-  bindPositionDragInputs();
-  const el=document.getElementById('editPreview');if(!el)return;
-  syncBackgroundSourceUI('edit'); const b=books.find(x=>x.id===currentEditBook); updatePreviewStage('edit'); const panelBg=document.getElementById('editPanelBg')?.value||'#fff'; const bookRadius=Math.max(0,Math.min(120,parseFloat(document.getElementById('editRadius')?.value) || (b?.bookRadius??16))); const pattern=document.getElementById('editPattern')?.value||'plain'; const backgroundMode=document.getElementById('editBackgroundMode')?.value||(b?.backgroundMode||(b?.backgroundImage?'image':'pattern')); const patternColor=document.getElementById('editPatternColor')?.value||'#dfe3e8'; const backgroundImage=document.getElementById('editBackgroundImage')?.value||''; const headerBg=document.getElementById('editHeaderBg')?.value||'#fafbfc'; const showHeader=document.getElementById('editShowHeader')?.value||'yes'; const showFooter=document.getElementById('editShowFooter')?.value||(b?.showFooter!=='no'?'yes':'no'); const headerFieldId=document.getElementById('editHeaderField')?.value||''; const bookTitle=document.getElementById('editBookTitle')?.value||(b?b.title:'図鑑タイトル');
-  const headerTextColor=document.getElementById('editHeaderTextColor')?.value||(b?.headerTextColor||'#20242a'), headerFontSize=parseFloat(document.getElementById('editHeaderFontSize')?.value)||(b?.headerFontSize||13), headerFontFamily=fontFamilyCss(document.getElementById('editHeaderFontFamily')?.value||(b?.headerFontFamily||'display')), headerAlign=textAlignCss(document.getElementById('editHeaderTextAlign')?.value||(b?.headerTextAlign||'left')), headerTextX=Math.max(-200,Math.min(200,parseFloat(document.getElementById('editHeaderTextX')?.value ?? b?.headerTextX ?? 0)||0));
-  const footerTextColor=document.getElementById('editFooterTextColor')?.value||(b?.footerTextColor||'#737b86'), footerBg=document.getElementById('editFooterBg')?.value||(b?.footerBg||headerBg), footerFontSize=parseFloat(document.getElementById('editFooterFontSize')?.value)||(b?.footerFontSize||11), footerFontFamily=fontFamilyCss(document.getElementById('editFooterFontFamily')?.value||(b?.footerFontFamily||'display')), footerAlign=textAlignCss(document.getElementById('editFooterTextAlign')?.value||(b?.footerTextAlign||'center')), footerTextX=Math.max(-200,Math.min(200,parseFloat(document.getElementById('editFooterTextX')?.value ?? b?.footerTextX ?? 0)||0));
-  const def=b?.footerNav||{}; const nav={}; ['prevLabel','editLabel','deleteLabel','nextLabel','prevColor','editColor','deleteColor','nextColor','prevBg','editBg','deleteBg','nextBg'].forEach(k=>{const elx=document.getElementById('editNav'+k.charAt(0).toUpperCase()+k.slice(1)); nav[k]=elx?elx.value:(def[k]||({prevLabel:'〈 前へ',editLabel:'編集',deleteLabel:'削除',nextLabel:'次へ 〉',prevColor:'#59616c',editColor:'#fff',deleteColor:'#fff',nextColor:'#59616c',prevBg:'#fff',editBg:'#4f6bed',deleteBg:'#e05252',nextBg:'#fff'})[k]);});
-  const asp=parseAspect(getEditAspectValue()); const gridInterval=Math.max(1,parseInt(document.getElementById('editGridGuideInterval')?.value)||1); const guideW=(100/48)*gridInterval, guideH=guideW*asp.w/asp.h; el.style.setProperty('--guide-cell-w',guideW.toFixed(6)+'%'); el.style.setProperty('--guide-cell-h',guideH.toFixed(6)+'%'); el.style.aspectRatio=`${asp.w} / ${asp.h}`; el.style.backgroundColor=panelBg; el.style.setProperty('--book-radius-base',bookRadius+'px'); el.style.setProperty('--pattern-color1',patternColor); el.style.setProperty('--pattern-color2',panelBg); el.style.backgroundImage='none'; el.classList.remove('book-pattern-plain','book-pattern-check','book-pattern-grid','book-pattern-border','book-pattern-check-even','book-pattern-cross-dots');
-  const button=(k,fallback,disabled=false)=>`<button class="btn" ${disabled?'disabled':''} style="color:${nav[k+'Color']};background:${nav[k+'Bg']};border-color:${nav[k+'Bg']};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));">${esc(nav[k+'Label']||fallback)}</button>`;
-  const headerHtml=showHeader==='yes'?`<div class="book-header" style="background:${headerBg};color:${headerTextColor};font-family:${headerFontFamily};font-size:calc(${headerFontSize}px * var(--book-scale,1));text-align:${headerAlign};transform:translateX(calc(${headerTextX}px * var(--book-scale,1)));"><span style="font-family:${headerFontFamily};text-align:${headerAlign};display:inline-flex;align-items:center;gap:4px">${esc(document.getElementById('editHeaderText')?.value||bookTitle)}</span><span style="font-family:${headerFontFamily};text-align:right">No. 1 / ${b?.items?.length||1}</span></div>`:'';
-  const footerHtml=showFooter==='yes'?`<div class="book-footer" style="background:${footerBg};color:${footerTextColor};font-family:${footerFontFamily};font-size:calc(${footerFontSize}px * var(--book-scale,1));padding:calc(4px * var(--book-scale,1)) calc(6px * var(--book-scale,1));min-height:calc(34px * var(--book-scale,1));text-align:${footerAlign}"><div class="footer-nav" style="transform:translateX(calc(${footerTextX}px * var(--book-scale,1)))"><div class="footer-title">${esc(document.getElementById('editFooterText')?.value||bookTitle)}</div><div class="footer-actions">${button('prev','〈 前へ',true)}${button('edit','編集')}${button('delete','削除')}${button('next','次へ 〉',true)}</div></div></div>`:'';
-  // 編集プレビューも実データを流用せず、常に固定サンプルを表示する。
-  const fs=collectFields('editFields').filter(f=>f.id!==headerFieldId); el.innerHTML=`${headerHtml}<div class="preview-body-area" id="editPreviewBody">${fs.map(f=>layoutBoxHtml(f,null)).join('')}</div>${footerHtml}`; applyPreviewBackground('editPreview',backgroundImage,pattern,patternColor,panelBg,backgroundMode,{size:document.getElementById('editPatternSize')?.value,line:document.getElementById('editPatternLineWidth')?.value,gap:document.getElementById('editPatternGap')?.value,angle:document.getElementById('editPatternAngle')?.value}); initDragAndDrop('editPreviewBody','editPreview'); scheduleFitPreviewBook('edit'); installPreviewScaleObservers();
-}
+function refreshCreatePreview(){ refreshPreview('create'); }
+function refreshEditPreview(){ refreshPreview('edit'); }
 
 function fontFamilyCss(key){
   const map={
@@ -3182,7 +3215,7 @@ function initMultiLayoutItem(item, bodyEl, wrapperId){
   let isResizing=false,isDragging=false,startX,startY,colW,rowH;
   const handle=item.querySelector('.resize-handle');
   const prefix=wrapperId==='createPreview'?'create':'edit';
-  const doRefresh=()=>{ if(prefix==='create') refreshCreatePreview(); else refreshEditPreview(); };
+  const doRefresh=()=>{ refreshPreview(prefix); };
   const getPos=()=>getMultiPositionFromRow(box,slotIndex)||{x:1,y:1,w:1,h:1};
 
   item.ondblclick=(e)=>{
@@ -4067,6 +4100,80 @@ function openEditItem(bookId, index){
   openAddItem(bookId, index); 
 }
 
+// ==== 登録画像（各項目の画像欄）の保存前最適化 ====
+// 以前は圧縮・リサイズなしでそのままIndexedDBに保存しており、
+// 大量登録するとDBが肥大化して動作が重くなったり保存に失敗するリスクがあった。
+// 画像フィールドの値を書き換えるすべての入口（ファイル選択・貼り付け・トリミング・背景透過）を
+// このoptimizeImageDataUrl()に通し、必ず「長辺1200px・WebP・品質80前後」まで圧縮してから保存する。
+// 画像を選択 → 自動最適化（リサイズ／WebP変換／品質調整） → IndexedDB、という流れになる。
+const ITEM_IMAGE_MAX_SIZE = 1200;
+const ITEM_IMAGE_QUALITY = 0.82;
+
+let _webpEncodeSupported = null;
+function supportsWebpEncoding(){
+  if(_webpEncodeSupported !== null) return _webpEncodeSupported;
+  try{
+    const c=document.createElement('canvas'); c.width=1; c.height=1;
+    _webpEncodeSupported = c.toDataURL('image/webp').indexOf('data:image/webp')===0;
+  }catch(e){ _webpEncodeSupported=false; }
+  return _webpEncodeSupported;
+}
+
+// dataURL（またはhttp(s) URL）の画像を、長辺maxSize px・WebP・quality品質へ変換する。
+// WebPでの書き出しに対応していない環境ではJPEGにフォールバックする
+// （その場合のみ、透過部分が黒くならないよう先に白で塗りつぶす）。
+// PNGのように元々圧縮率の低い形式も、ここを通ることで基本的にWebPへ変換される。
+function optimizeImageDataUrl(dataUrl, maxSize=ITEM_IMAGE_MAX_SIZE, quality=ITEM_IMAGE_QUALITY, opts={}){
+  const transparent = opts.transparent !== false;
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    if(/^https?:\/\//i.test(dataUrl)) img.crossOrigin='anonymous';
+    img.onload=()=>{
+      try{
+        const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+        if(!w||!h) throw new Error('画像サイズを取得できませんでした');
+        const scale=Math.min(1, maxSize/Math.max(w,h));
+        const nw=Math.max(1,Math.round(w*scale)), nh=Math.max(1,Math.round(h*scale));
+        const c=document.createElement('canvas'); c.width=nw; c.height=nh;
+        const ctx=c.getContext('2d'); if(!ctx) throw new Error('Canvasを初期化できませんでした');
+        ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+        const useWebp=supportsWebpEncoding();
+        if(!useWebp || !transparent){ ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,nw,nh); }
+        ctx.drawImage(img,0,0,nw,nh);
+        const out = useWebp ? c.toDataURL('image/webp',quality) : c.toDataURL('image/jpeg',Math.max(quality,0.85));
+        resolve({dataUrl:out, width:nw, height:nh, scaled:scale<1, format: useWebp?'webp':'jpeg'});
+      }catch(err){reject(err)}
+    };
+    img.onerror=()=>reject(new Error('画像を読み込めませんでした'));
+    img.src=dataUrl;
+  });
+}
+
+// ファイル選択・クリップボード貼り付け共通の「画像→最適化→フィールド反映」処理。
+// 以前はhandleImageFile/handleImagePasteにほぼ同じリサイズ処理が2重実装されていた。
+function applyImageBlobToField(blob, fieldId){
+  return new Promise((resolve,reject)=>{
+    if(!blob || !blob.type || !blob.type.startsWith('image/')){
+      reject(new Error('画像ファイルを選択してください'));
+      return;
+    }
+    const reader=new FileReader();
+    reader.onload=async(event)=>{
+      try{
+        const result=await optimizeImageDataUrl(event.target.result, ITEM_IMAGE_MAX_SIZE, ITEM_IMAGE_QUALITY, {transparent:true});
+        const input=document.querySelector(`[data-id="${fieldId}"]`);
+        if(!input) throw new Error('画像入力欄が見つかりませんでした');
+        // 「入力欄」「tempItemData」「プレビュー」の3つを必ず同じ画像にそろえる。
+        input.value=result.dataUrl;
+        updateImagePreview(fieldId);
+        resolve(result);
+      }catch(err){reject(err)}
+    };
+    reader.onerror=()=>reject(new Error('画像ファイルの読み込みに失敗しました'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function handleImagePaste(e, inputEl){
 
   const clipboard =
@@ -4091,126 +4198,12 @@ function handleImagePaste(e, inputEl){
 
       if(!blob) continue;
 
-      const reader = new FileReader();
-
-      reader.onload = function(event){
-
-        const originalDataUrl =
-          event.target.result;
-
-        const img = new Image();
-
-        img.onload = function(){
-
-          try {
-
-            /*
-             * ファイル選択と同じく、
-             * 最大1600pxに縮小。
-             */
-            const MAX_SIZE = 1600;
-
-            let width =
-              img.naturalWidth ||
-              img.width;
-
-            let height =
-              img.naturalHeight ||
-              img.height;
-
-            if(!width || !height){
-              throw new Error(
-                '画像サイズを取得できません'
-              );
-            }
-
-            const scale =
-              Math.min(
-                1,
-                MAX_SIZE /
-                  Math.max(width, height)
-              );
-
-            const newWidth =
-              Math.max(
-                1,
-                Math.round(width * scale)
-              );
-
-            const newHeight =
-              Math.max(
-                1,
-                Math.round(height * scale)
-              );
-
-            const canvas =
-              document.createElement('canvas');
-
-            canvas.width = newWidth;
-            canvas.height = newHeight;
-
-            const ctx =
-              canvas.getContext('2d');
-
-            if(!ctx){
-              throw new Error(
-                'Canvasを作成できません'
-              );
-            }
-
-            ctx.drawImage(
-              img,
-              0,
-              0,
-              newWidth,
-              newHeight
-            );
-
-            const dataUrl = canvas.toDataURL('image/png');
-
-            inputEl.value = dataUrl;
-
-            tempItemData[
-              inputEl.dataset.id
-            ] = dataUrl;
-
-            updateImagePreview(
-              inputEl.dataset.id
-            );
-
-            toast('画像を貼り付けました');
-
-          } catch(err) {
-
-            console.error(
-              '貼り付け画像処理エラー:',
-              err
-            );
-
-            alert(
-              '貼り付けた画像の処理に失敗しました'
-            );
-          }
-        };
-
-        img.onerror = function(){
-
-          alert(
-            '貼り付けた画像を読み込めませんでした'
-          );
-        };
-
-        img.src = originalDataUrl;
-      };
-
-      reader.onerror = function(){
-
-        alert(
-          '画像の読み込みに失敗しました'
-        );
-      };
-
-      reader.readAsDataURL(blob);
+      applyImageBlobToField(blob, inputEl.dataset.id).then(()=>{
+        toast('画像を貼り付けました（自動でWebPに最適化しました）');
+      }).catch(err=>{
+        console.error('貼り付け画像処理エラー:', err);
+        alert(err && err.message ? err.message : '貼り付けた画像の処理に失敗しました');
+      });
 
       /*
        * 通常のペースト処理を止める
@@ -4229,92 +4222,16 @@ function handleImageFile(e, fieldId){
   const file = e.target.files && e.target.files[0];
   if(!file) return;
 
-  if(!file.type || !file.type.startsWith('image/')){
-    alert('画像ファイルを選択してください');
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = function(event){
-    const originalDataUrl = event.target.result;
-    const img = new Image();
-
-    img.onload = function(){
-      try {
-        const MAX_SIZE = 1600;
-        const width = img.naturalWidth || img.width;
-        const height = img.naturalHeight || img.height;
-
-        if(!width || !height){
-          throw new Error('画像サイズを取得できませんでした');
-        }
-
-        const scale = Math.min(1, MAX_SIZE / Math.max(width, height));
-        const newWidth = Math.max(1, Math.round(width * scale));
-        const newHeight = Math.max(1, Math.round(height * scale));
-
-        const canvas = document.createElement('canvas');
-        canvas.width = newWidth;
-        canvas.height = newHeight;
-
-        const ctx = canvas.getContext('2d');
-        if(!ctx) throw new Error('Canvasを初期化できませんでした');
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, newWidth, newHeight);
-
-        const dataUrl = canvas.toDataURL('image/png');
-
-        const input = document.querySelector(`[data-id="${fieldId}"]`);
-        const preview = document.getElementById(`img_preview_${fieldId}`);
-
-        if(!input){
-          throw new Error('画像入力欄が見つかりませんでした');
-        }
-
-        /*
-         * ここでは「入力欄」「tempItemData」「プレビュー」の3つを
-         * 必ず同じ画像にそろえる。
-         */
-        input.value = dataUrl;
-        tempItemData[fieldId] = dataUrl;
-
-        if(preview){
-          preview.src = dataUrl;
-          preview.style.display = 'block';
-        }
-
-        const status = document.getElementById(`status_${fieldId}`);
-        if(status) status.textContent = '画像設定済み';
-
-        toast(
-          scale < 1
-            ? `画像を読み込みました（${newWidth} × ${newHeight}px）`
-            : '画像を読み込みました'
-        );
-
-      } catch(err){
-        console.error('画像処理エラー:', err);
-        alert('画像の読み込みに失敗しました。');
-      }
-    };
-
-    img.onerror = function(){
-      console.error('画像読み込みエラー');
-      alert('画像ファイルを読み込めませんでした');
-    };
-
-    img.src = originalDataUrl;
-  };
-
-  reader.onerror = function(){
-    console.error('FileReader error:', reader.error);
-    alert('画像ファイルの読み込みに失敗しました');
-  };
-
-  reader.readAsDataURL(file);
+  applyImageBlobToField(file, fieldId).then(({width,height,scaled})=>{
+    toast(
+      scaled
+        ? `画像を読み込みました（${width} × ${height}px・WebPに最適化）`
+        : '画像を読み込みました（WebPに最適化）'
+    );
+  }).catch(err=>{
+    console.error('画像処理エラー:', err);
+    alert(err && err.message ? err.message : '画像の読み込みに失敗しました。');
+  });
 
   /*
    * 同じファイルを再選択できるようにする。
@@ -4703,7 +4620,7 @@ function changeCropperAspect(){
   imageCropperInstance.setAspectRatio(mode==='frame' && Number.isFinite(activeCropFrameAspect) ? activeCropFrameAspect : NaN);
 }
 
-function executeCrop(fieldId, editIndex){
+async function executeCrop(fieldId, editIndex){
   if(!imageCropperInstance){
     alert('トリミング画面がまだ準備できていません');
     return;
@@ -4712,10 +4629,11 @@ function executeCrop(fieldId, editIndex){
   try {
     const cropBook = books.find(x=>x.id===currentEditBook);
     const cropField = cropBook?.fields.find(f=>f.id===fieldId);
+    const isImageField = cropField?.type === 'image';
     const canvas = imageCropperInstance.getCroppedCanvas({
       maxWidth: 1600,
       maxHeight: 1600,
-      fillColor: cropField?.type === 'image' ? 'transparent' : '#ffffff',
+      fillColor: isImageField ? 'transparent' : '#ffffff',
       imageSmoothingEnabled: true,
       imageSmoothingQuality: 'high'
     });
@@ -4725,17 +4643,29 @@ function executeCrop(fieldId, editIndex){
       return;
     }
 
-    let dataUrl;
+    let rawDataUrl;
     try {
-      dataUrl = cropField?.type === 'image' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.90);
+      rawDataUrl = canvas.toDataURL('image/png');
     } catch(err){
       console.error('Canvas toDataURL error:', err);
       alert('画像を書き出せませんでした。外部URL画像の場合はCORS制限の可能性があります。');
       return;
     }
 
-    if(!dataUrl || dataUrl === 'data:,'){
+    if(!rawDataUrl || rawDataUrl === 'data:,'){
       alert('切り抜き画像の生成に失敗しました');
+      return;
+    }
+
+    // トリミング後の画像も、保存前に必ず長辺1200px・WebPまで最適化する
+    // （IndexedDBの肥大化を防ぐため）。
+    let dataUrl;
+    try {
+      const optimized = await optimizeImageDataUrl(rawDataUrl, ITEM_IMAGE_MAX_SIZE, ITEM_IMAGE_QUALITY, {transparent:isImageField});
+      dataUrl = optimized.dataUrl;
+    } catch(err){
+      console.error('画像最適化エラー:', err);
+      alert('画像の最適化に失敗しました');
       return;
     }
 
@@ -4767,7 +4697,7 @@ function executeCrop(fieldId, editIndex){
   }
 }
 
-function saveItem(bookId, editIndex){
+async function saveItem(bookId, editIndex){
  const b=books.find(x=>x.id===bookId);if(!b)return;
  const item={};
  document.querySelectorAll('#modal [data-id]').forEach(el=>item[el.dataset.id]=el.value);
@@ -4777,7 +4707,24 @@ function saveItem(bookId, editIndex){
    if(!selects.length) return;
    item[f.id]=selects.map(s=>s.value).filter(v=>v!=='');
  });
- 
+
+ // 画像フィールドの保存前最適化・安全網。
+ // ファイル選択／貼り付けの時点で基本的にWebPへ変換済みだが、
+ // トリミングや背景透過を経由した画像がまだPNG等のまま残っていた場合に備え、
+ // IndexedDBへ書き込む直前にもう一度だけ通す（外部URLの画像はそのまま・埋め込みしない）。
+ const imageFields=(b.fields||[]).filter(f=>f.type==='image');
+ for(const f of imageFields){
+   const val=item[f.id];
+   if(typeof val==='string' && val.startsWith('data:image/') && !val.startsWith('data:image/webp')){
+     try{
+       const optimized=await optimizeImageDataUrl(val, ITEM_IMAGE_MAX_SIZE, ITEM_IMAGE_QUALITY, {transparent:true});
+       item[f.id]=optimized.dataUrl;
+     }catch(err){
+       console.error('画像の保存前最適化に失敗しました:', err);
+     }
+   }
+ }
+
  if(editIndex !== null){
    b.items[editIndex] = item;
    toast('データを更新しました');
@@ -5367,12 +5314,20 @@ async function deleteBook(id){
 async function resetData(){
   if(await appConfirm('本当にすべて削除しますか？')){
     books=[];
-    idbDelete(IDB_BOOKS_KEY).catch(()=>{});
-    clearLegacyLocalStorageBooks();
-    dataStoreStatus={state:'empty',source:'none',message:''};
     showPage('home');
     renderHome();
-    toast('データを削除しました');
+    try{
+      await idbDelete(IDB_BOOKS_KEY);
+      clearLegacyLocalStorageBooks();
+      dataStoreStatus={state:'empty',source:'none',message:''};
+      toast('データを削除しました');
+    }catch(e){
+      // 画面上は空になっているが、保存領域側の削除には失敗している状態。
+      // 次回起動時に古いデータが復活し得るため、明確にエラーとして知らせる。
+      dataStoreStatus={state:'error',source:'IndexedDB',message:String(e?.message||e)};
+      notifyStorageError('データの削除',e);
+    }
+    updateDataStatus();
   }
 }
 function toast(s){
@@ -5739,7 +5694,7 @@ function mobileItemSetPos(info,pos){
 function bindMobileItemInteractions(bodyEl,wrapperId){
   if(!bodyEl) return;
   const prefix = wrapperId==='createPreview' ? 'create' : 'edit';
-  const doRefresh=()=>{ prefix==='create' ? refreshCreatePreview() : refreshEditPreview(); };
+  const doRefresh=()=>{ refreshPreview(prefix); };
   bodyEl.querySelectorAll('.layout-item,.layout-item-multi').forEach(item=>{
     if(item.dataset.mobileGesturesBound) return;
     item.dataset.mobileGesturesBound='1';
@@ -5908,6 +5863,7 @@ var draftBaseline={create:null,edit:null};
 var draftTimers={create:null,edit:null};
 var draftLastSig={create:'',edit:''};
 var draftHasStored={create:false,edit:false};
+var draftSaveFailedNotified={create:false,edit:false}; // 自動保存失敗トーストを連打しないためのフラグ
 var draftRestoring=false;
 
 function draftKey(prefix,bookId){
@@ -5932,7 +5888,7 @@ function draftSignature(d){
 function captureDraftBaseline(prefix,snap){
   try{
     draftBaseline[prefix]={snap:snap,hidden:JSON.stringify(collectDraftHidden(prefix)),outer:JSON.stringify(draftOuterState(prefix))};
-    draftLastSig[prefix]=''; draftHasStored[prefix]=false;
+    draftLastSig[prefix]=''; draftHasStored[prefix]=false; draftSaveFailedNotified[prefix]=false;
   }catch(e){}
 }
 function draftIsDirty(prefix,d){
@@ -5953,7 +5909,17 @@ async function saveDraftNow(prefix){
   try{
     if(draftIsDirty(prefix,d)){ await idbSet(draftKey(prefix),d); draftHasStored[prefix]=true; }
     else if(draftHasStored[prefix]){ await idbDelete(draftKey(prefix)); draftHasStored[prefix]=false; }
-  }catch(e){ draftLastSig[prefix]=''; }
+    draftSaveFailedNotified[prefix]=false;
+  }catch(e){
+    draftLastSig[prefix]='';
+    // 自動保存（下書き）が効いていないと、閉じたときに編集内容が消える恐れがある。
+    // 700msごとに再試行されるため、連続でトーストが出続けないよう1回だけ知らせる。
+    console.error('下書きの自動保存に失敗しました:',e);
+    if(!draftSaveFailedNotified[prefix]){
+      draftSaveFailedNotified[prefix]=true;
+      try{ toast('⚠️ 編集内容の自動保存に失敗しています。作業内容は保存されるまで消えない場所（メモ帳など）にも控えてください'); }catch(_){}
+    }
+  }
 }
 function scheduleDraftSave(prefix){
   if(!prefix||historyRestoring||draftRestoring||!draftBaseline||!draftBaseline[prefix]) return;
@@ -5965,7 +5931,9 @@ async function clearDraft(prefix,bookId){
   const key=draftKey(prefix,bookId);
   // 確定後に余計な下書きが書き戻されないよう、次の初期化までは保存を止める
   draftBaseline[prefix]=null; draftLastSig[prefix]=''; draftHasStored[prefix]=false;
-  try{ await idbDelete(key); }catch(e){}
+  // 本体データは既に確定済みのため致命的ではないが、消し忘れると次回起動時に
+  // 古い下書きが復元されてしまうことがあるので、原因調査用にログだけは残す。
+  try{ await idbDelete(key); }catch(e){ console.warn('下書きの削除に失敗しました:',e); }
 }
 function applyDraftImagePreviews(prefix){
   const scope=historyScopeElFor(prefix); if(!scope) return;
@@ -5994,7 +5962,7 @@ function applyDraftState(prefix,state){
     restoreFieldsSnapshot(prefix,state.snap);
     applyDraftImagePreviews(prefix);
     try{ syncOuterFrameSummary(prefix); }catch(e){}
-    if(prefix==='create') refreshCreatePreview(); else refreshEditPreview();
+    refreshPreview(prefix);
   }finally{ draftRestoring=false; }
 }
 function showDraftBanner(prefix){
@@ -6039,7 +6007,7 @@ async function discardDraft(prefix){
     applyDraftState(prefix,{snap:base.snap,hidden:hidden,outer:outer||(prefix==='create'?{device:{phone:null,pc:null},scale:100,visible:true,style:null}:null)});
     initFieldHistory(prefix);
   }
-  try{ await idbDelete(draftKey(prefix,bookId)); }catch(e){}
+  try{ await idbDelete(draftKey(prefix,bookId)); }catch(e){ console.warn('下書きの破棄に失敗しました:',e); }
   draftHasStored[prefix]=false; draftLastSig[prefix]='';
   document.querySelectorAll('.draft-banner[data-prefix="'+prefix+'"]').forEach(x=>x.remove());
   toast('編集途中の内容を破棄しました');
