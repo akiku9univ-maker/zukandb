@@ -152,6 +152,14 @@ body.fullscreen-mode .book-footer-external{z-index:100002}
 .image-placeholder{height:100%;width:100%;display:flex;align-items:center;justify-content:center;color:#a0a7b0;font-size:25px}
 .zukan-nav-bar{display:none}
 .modal-backdrop{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;padding:20px;z-index:100}.modal-backdrop.show{display:flex}
+/* 端末（特にアプリ内ブラウザ等）によってはネイティブのconfirm()が反応しないことがあるため、
+   削除の確認は自前のダイアログで行う。常に最前面に表示されるよう非常に高いz-indexを持たせる。 */
+.confirm-dialog-backdrop{position:fixed;inset:0;z-index:200000;background:#000809cc;display:none;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+.confirm-dialog-backdrop.show{display:flex}
+.confirm-dialog{background:#fff;border-radius:16px;max-width:360px;width:100%;padding:22px 20px;box-shadow:0 20px 60px #0008;box-sizing:border-box}
+.confirm-dialog p{white-space:pre-wrap;margin:0 0 20px;font-size:14.5px;line-height:1.65;color:#20242a}
+.confirm-dialog-actions{display:flex;gap:10px;justify-content:flex-end}
+.confirm-dialog-actions .btn{min-width:88px}
 .modal{background:#fff;border-radius:0;width:100vw;max-width:none;max-height:100vh;height:100vh;overflow:auto;padding:28px clamp(20px,3vw,48px);box-shadow:none}.modal h2{font-family:var(--font-display);font-weight:800;margin:0 0 18px}
 .item-form-grid{display:grid;gap:14px}
 .settings-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(520px,680px);gap:28px;align-items:start}.settings-layout 
@@ -226,6 +234,11 @@ body.fullscreen-mode .book-container {max-width:none;width:min(92vh * var(--aspe
   .field input,.field select,.field textarea,.row input,.row select,.field-group-grid input,.field-group-grid select{min-height:44px}
   .field input[type="color"],.row input[type="color"],.field-group-grid input[type="color"]{min-height:40px}
   .btn{min-height:40px}
+  /* 図鑑作成中は、ヘッダーが「ロゴ＋キャンセル＋この図鑑を作成」で狭い画面に収まりきらないため、
+     ボタン行をヘッダー内で折り返して2段にする（横スクロールで見切れるのを防ぐ） */
+  body.page-create header{flex-wrap:wrap;height:auto;overflow:visible;row-gap:8px;padding-top:10px;padding-bottom:10px}
+  body.page-create .header-create-actions{width:100%;margin-left:0}
+  body.page-create .header-create-actions .btn{flex:1;min-height:44px;justify-content:center}
 }
 
 /* Cropper用の微調整 */
@@ -812,6 +825,15 @@ body.sheet-dragging{user-select:none;-webkit-user-select:none}
   <button type="button" class="footer-link" data-page="contact" onclick="showPage('contact')" style="background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px">お問い合わせ</button>
 </footer>
 
+<div id="confirmDialogBackdrop" class="confirm-dialog-backdrop">
+  <div class="confirm-dialog" role="alertdialog" aria-modal="true">
+    <p id="confirmDialogMessage"></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn" id="confirmDialogCancelBtn">キャンセル</button>
+      <button type="button" class="btn danger" id="confirmDialogOkBtn">OK</button>
+    </div>
+  </div>
+</div>
 <div id="outerFrameBackdrop" class="outer-frame-backdrop" aria-hidden="true"></div>
 <div id="modalBackdrop" class="modal-backdrop">
   <div class="modal" id="modal"></div>
@@ -5276,8 +5298,35 @@ function addSample(){
  books.push(b);save();toast('サンプルを追加しました');showPage('library');
 }
 
-function deleteItem(id,i){
-  if(!confirm('このデータを削除しますか？'))return;
+/* ネイティブのconfirm()の代わりに使う、自前の確認ダイアログ。
+   アプリ内ブラウザなど一部の環境ではwindow.confirm()が反応しない（何も起きない）ことがあるため、
+   削除など「押しても反応しない」と困る操作はすべてこちらを使う。 */
+function appConfirm(message){
+  return new Promise(resolve=>{
+    const backdrop=document.getElementById('confirmDialogBackdrop');
+    const msgEl=document.getElementById('confirmDialogMessage');
+    const okBtn=document.getElementById('confirmDialogOkBtn');
+    const cancelBtn=document.getElementById('confirmDialogCancelBtn');
+    if(!backdrop||!msgEl||!okBtn||!cancelBtn){ resolve(window.confirm(message)); return; }
+    msgEl.textContent=message;
+    backdrop.classList.add('show');
+    const cleanup=(result)=>{
+      backdrop.classList.remove('show');
+      okBtn.removeEventListener('click',onOk);
+      cancelBtn.removeEventListener('click',onCancel);
+      backdrop.removeEventListener('click',onBackdropClick);
+      resolve(result);
+    };
+    const onOk=()=>cleanup(true);
+    const onCancel=()=>cleanup(false);
+    const onBackdropClick=(e)=>{ if(e.target===backdrop) cleanup(false); };
+    okBtn.addEventListener('click',onOk);
+    cancelBtn.addEventListener('click',onCancel);
+    backdrop.addEventListener('click',onBackdropClick);
+  });
+}
+async function deleteItem(id,i){
+  if(!(await appConfirm('このデータを削除しますか？')))return;
   const b = books.find(x=>x.id===id);
   if(b){
     b.items.splice(i,1);
@@ -5287,7 +5336,7 @@ function deleteItem(id,i){
   }
 }
 
-function deleteBook(id){
+async function deleteBook(id){
   const b = books.find(x=>x.id===id);
   if(!b) return;
 
@@ -5296,7 +5345,7 @@ function deleteBook(id){
     ? `「${b.title}」を図鑑ごと削除しますか？\n\n登録されているデータ ${itemCount} 件もすべて削除されます。\nこの操作は元に戻せません。`
     : `「${b.title}」を削除しますか？\n\nこの操作は元に戻せません。`;
 
-  if(!confirm(message)) return;
+  if(!(await appConfirm(message))) return;
 
   const index = books.findIndex(x=>x.id===id);
   if(index >= 0) books.splice(index,1);
@@ -5315,8 +5364,8 @@ function deleteBook(id){
   toast(`「${b.title}」を削除しました`);
 }
 
-function resetData(){
-  if(confirm('本当にすべて削除しますか？')){
+async function resetData(){
+  if(await appConfirm('本当にすべて削除しますか？')){
     books=[];
     idbDelete(IDB_BOOKS_KEY).catch(()=>{});
     clearLegacyLocalStorageBooks();
